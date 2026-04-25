@@ -6107,11 +6107,10 @@ function _buildTokenClient(clientId, onSuccess) {
         const u = await r.json();
         window.driveUserEmail = u.email || '—';
       } catch(e) { window.driveUserEmail = '—'; }
-      driveSetStatus('ok', 'Drive ✓');
+      driveSetStatus('loading', 'Синк...');
       driveRefreshModalState();
-      await driveEnsureFolder();
-      await driveFetchFileMeta();
-      _driveUpdateFileMeta();
+      await _driveStartupSync();
+      driveRefreshModalState();
       if (onSuccess) onSuccess();
     }
   });
@@ -6255,9 +6254,12 @@ async function driveUploadFile(fname, data) {
 }
 
 async function driveDownloadFile(key) {
+  // Always fetch fresh meta — file may have changed on another device
+  await driveFetchFileMeta();
   if (!driveFileMeta[key]) return null;
   const r = await fetch(`${DRIVE_API}/files/${driveFileMeta[key].id}?alt=media`,
     { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (r.status === 401) { driveClearToken(); driveToken = null; throw new Error('Токен истёк'); }
   if (!r.ok) throw new Error(`Download ${r.status}`);
   return r.json();
 }
@@ -6559,8 +6561,8 @@ async function drivePullAll() {
 
 // ── Auto-restore on page load ─────────────────────
 // Strategy:
-//   1. If sessionStorage has a token → try it immediately (survives F5)
-//   2. If clientId saved → try silent GIS re-auth (no popup if Google session active)
+//   1. Cached token → validate → merge-sync immediately
+//   2. clientId saved → silent GIS re-auth → merge-sync
 //   3. Otherwise → wait for user to click "Войти"
 async function driveAutoRestore() {
   const clientId = driveLoadClientId();
@@ -6569,7 +6571,6 @@ async function driveAutoRestore() {
   const cached = driveRestoreToken();
   if (cached && clientId) {
     driveToken = cached;
-    // Quick validity check
     try {
       const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
         { headers: { Authorization: 'Bearer ' + cached } });
@@ -6578,13 +6579,10 @@ async function driveAutoRestore() {
         window.driveUserEmail = u.email || '—';
         driveSetStatus('ok', 'Drive ✓');
         driveRefreshModalState();
-        await driveEnsureFolder();
-        await driveFetchFileMeta();
-        _driveUpdateFileMeta();
-        return; // success
+        await _driveStartupSync();
+        return;
       }
     } catch(e) {}
-    // Token invalid
     driveToken = null;
     driveClearToken();
   }
@@ -6592,7 +6590,6 @@ async function driveAutoRestore() {
   // Step 2: silent GIS re-auth
   if (!clientId) return;
   try {
-    // Wait for GIS library to load
     if (typeof google === 'undefined' || !google.accounts) {
       await new Promise(resolve => {
         const check = setInterval(() => {
@@ -6605,11 +6602,86 @@ async function driveAutoRestore() {
     if (ok) {
       driveSetStatus('ok', 'Drive ✓');
       driveRefreshModalState();
-      await driveEnsureFolder();
-      await driveFetchFileMeta();
-      _driveUpdateFileMeta();
+      await _driveStartupSync();
     }
   } catch(e) { /* silent — user can manually sign in */ }
+}
+
+// ── Startup merge-sync ────────────────────────────
+// Runs once after login/token-restore. Merges both apps
+// with Drive silently. Shows indicator but no alert on success.
+async function _driveStartupSync() {
+  try {
+    await driveEnsureFolder();
+    await driveFetchFileMeta();
+    _driveUpdateFileMeta();
+
+    let mergedAnything = false;
+
+    // Merge ops
+    if (driveFileMeta['ops']) {
+      try {
+        const remote = await fetch(`${DRIVE_API}/files/${driveFileMeta['ops'].id}?alt=media`,
+          { headers: { Authorization: 'Bearer ' + driveToken } });
+        if (remote.ok) {
+          const remoteData = await remote.json();
+          if (remoteData && remoteData.txns) {
+            const before = opsState.txns.filter(t => !t._deleted).length;
+            const merged = _mergeOps(opsState, remoteData);
+            const after  = merged.txns.filter(t => !t._deleted).length;
+            if (after !== before || merged.txns.length !== opsState.txns.length) {
+              opsState = merged;
+              opsSave();
+              opsReRenderCurrent();
+              mergedAnything = true;
+              syncLog(`⇄ Финучёт: подтянуто с Drive при старте (+${Math.max(0, after - before)})`, 'ok');
+            }
+            // Always push merged result back so Drive is also up to date
+            await driveUploadFile(DRIVE_OPS_FILE, opsState);
+          }
+        }
+      } catch(e) { syncLog('Старт-синк ops: ' + e.message, 'warn'); }
+    }
+
+    // Merge inv
+    if (driveFileMeta['inv']) {
+      try {
+        const remote = await fetch(`${DRIVE_API}/files/${driveFileMeta['inv'].id}?alt=media`,
+          { headers: { Authorization: 'Bearer ' + driveToken } });
+        if (remote.ok) {
+          const remoteData = await remote.json();
+          if (remoteData && remoteData.dates) {
+            const before = (invState.dates || []).filter(r => !r._deleted).length;
+            const merged = _mergeInv(invState, remoteData);
+            const after  = merged.dates.filter(r => !r._deleted).length;
+            if (after !== before || merged.dates.length !== (invState.dates || []).length) {
+              invState = merged;
+              invSaveState();
+              invLoadRates();
+              invCurId = null;
+              invRenderSidebar();
+              mergedAnything = true;
+              syncLog(`⇄ Инвентаризация: подтянуто с Drive при старте (+${Math.max(0, after - before)})`, 'ok');
+            }
+            await driveUploadFile(DRIVE_INV_FILE, invState);
+          }
+        }
+      } catch(e) { syncLog('Старт-синк inv: ' + e.message, 'warn'); }
+    }
+
+    await driveFetchFileMeta();
+    _driveUpdateFileMeta();
+
+    if (mergedAnything) {
+      driveSetStatus('ok', 'Drive ✓ синк');
+      setTimeout(() => driveSetStatus('ok', 'Drive ✓'), 3000);
+    } else {
+      driveSetStatus('ok', 'Drive ✓');
+    }
+  } catch(e) {
+    syncLog('Старт-синк: ' + e.message, 'warn');
+    driveSetStatus('ok', 'Drive ✓'); // still connected, just sync failed
+  }
 }
 
 window.addEventListener('load', () => { driveAutoRestore(); });
