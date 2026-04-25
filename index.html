@@ -2292,6 +2292,13 @@ if (!opsState.categories) opsState.categories = OPS_DEFAULT_CATS;
 // emoji OFF by default
 if (opsState.catUseEmoji === undefined) opsState.catUseEmoji = false;
 
+// ── ID generation — globally unique, no cross-device collisions ──────
+// Format: timestamp (ms) + 4 random hex chars → e.g. 1718000000000_a3f2
+// Safe to compare with old numeric ids because String(number) never contains '_'
+function opsGenId() {
+  return Date.now() + '_' + Math.random().toString(16).slice(2, 6);
+}
+
 function opsCats() { return opsState.categories || OPS_DEFAULT_CATS; }
 function opsCat(id) { return opsCats().find(c => c.id === id) || { name: id || '—', color:'#6b7280', icon:'📦' }; }
 function opsCatDisplay(cat) {
@@ -2469,7 +2476,7 @@ function renderP1() {
       ${catCell}
       <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount,true)}</td>
       <td style="color:var(--muted)">${t.comment||'—'}</td>
-      <td><button class="row-edit-btn" onclick="opsOpenEditModal(${t.id})">✎</button></td>
+      <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
     </tr>`;
     }).join('');
     rows += `<tr class="month-subtotal-row"><td colspan="${colspan}">
@@ -2585,7 +2592,7 @@ function renderP2() {
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
     <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
     <td style="color:var(--muted)">${t.comment||'—'}</td>
-    <td><button class="row-edit-btn" onclick="opsOpenEditModal(${t.id})">✎</button></td>
+    <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
 
@@ -2625,7 +2632,7 @@ function renderP5() {
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
     <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
     <td style="color:var(--muted)">${t.comment||'—'}</td>
-    <td><button class="row-edit-btn" onclick="opsOpenEditModal(${t.id})">✎</button></td>
+    <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
 
@@ -2657,7 +2664,7 @@ function renderP3() {
           <span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span>
           <span class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;font-size:12px;min-width:88px;flex-shrink:0">${fmtAmt(t.amount,true)}</span>
           <span class="txn-comment">${t.comment||'—'}</span>
-          <button class="row-edit-btn" onclick="opsOpenEditModal(${t.id})">✎</button>
+          <button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button>
         </div>`).join('');
     }
 
@@ -2742,7 +2749,7 @@ function renderP4() {
     <td style="font-size:11px;color:var(--muted)">${fmtAmt(t.cardRun,true)}</td>
     <td style="font-size:11px;font-weight:500;color:${t.totalRun>=0?'var(--green)':'var(--red)'}">${fmtAmt(t.totalRun,true)}</td>
     <td style="color:var(--muted)">${t.comment||'—'}</td>
-    <td><button class="row-edit-btn" onclick="opsOpenEditModal(${t.id})">✎</button></td>
+    <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
 
@@ -2766,7 +2773,7 @@ function opsOpenAddModal() {
   document.getElementById('ops-modal').classList.add('is-open');
 }
 function opsOpenEditModal(id) {
-  const t = opsState.txns.find(t => t.id === id); if (!t) return;
+  const t = opsState.txns.find(t => String(t.id) === String(id)); if (!t) return;
   opsEditId = id;
   document.getElementById('ops-modal-title').textContent = 'Редактировать операцию';
   document.getElementById('m-date').value    = t.date;
@@ -2795,10 +2802,10 @@ function opsSaveOp() {
 
   const now = new Date().toISOString();
   if (opsEditId) {
-    const t = opsState.txns.find(t => t.id === opsEditId);
+    const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
     if (t) Object.assign(t, { date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
   } else {
-    opsState.txns.push({ id: opsState.nextId++, date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
+    opsState.txns.push({ id: opsGenId(), date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
   }
   opsSave(); opsCloseModal(); opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
@@ -2806,7 +2813,7 @@ function opsSaveOp() {
 function opsDeleteOp() {
   if (!opsEditId || !confirm('Удалить операцию?')) return;
   // Soft delete: mark as deleted and propagate via merge
-  const t = opsState.txns.find(t => t.id === opsEditId);
+  const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
   if (t) { t._deleted = true; t._deletedAt = new Date().toISOString(); t._editedAt = t._deletedAt; }
   opsSave(); opsCloseModal(); opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
@@ -2927,7 +2934,7 @@ function opsLoadItems(items, mode) {
 
 // Expand/collapse detail row in table
 function opsToggleItems(id) {
-  const t = opsState.txns.find(t => t.id === id);
+  const t = opsState.txns.find(t => String(t.id) === String(id));
   if (!t || !t.items || !t.items.length) return;
   const existing = document.getElementById(`txn-items-${id}`);
   if (existing) { existing.remove(); return; }
@@ -4877,7 +4884,7 @@ quickInputSubmit = function() {
 
   const date = new Date().toISOString().slice(0,10);
   const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
-  opsState.txns.push({ id: opsState.nextId++, date, type, way, amount: finalAmount, comment, cat, _editedAt: new Date().toISOString() });
+  opsState.txns.push({ id: opsGenId(), date, type, way, amount: finalAmount, comment, cat, _editedAt: new Date().toISOString() });
   opsSave(); opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
 
@@ -6298,37 +6305,44 @@ function _mergeOps(local, remote) {
   const remoteTs = new Date(remote._lastModified || 0).getTime();
   const settingsSrc = remoteTs > localTs ? remote : local;
 
+  const localTxns  = local.txns  || [];
+  const remoteTxns = remote.txns || [];
+  console.log(`[merge-ops] local:${localTxns.length} remote:${remoteTxns.length}`);
+  console.log(`[merge-ops] local ids:`,  localTxns.map(t => String(t.id)));
+  console.log(`[merge-ops] remote ids:`, remoteTxns.map(t => String(t.id)));
+
   // Build id→txn map, merge
   const map = new Map();
-  const allTxns = [...(remote.txns || []), ...(local.txns || [])];
+  // Remote first, then local — local wins on equal timestamp
+  const allTxns = [...remoteTxns, ...localTxns];
   for (const t of allTxns) {
     const key = String(t.id);
     if (!map.has(key)) {
       map.set(key, t);
     } else {
-      // Conflict on same id: pick newer _editedAt, else local wins
+      // Conflict on same id: pick newer _editedAt, else keep existing (local wins)
       const existing = map.get(key);
       const existingTs = new Date(existing._editedAt || existing.date || 0).getTime();
-      const incomingTs = new Date(t._editedAt       || t.date       || 0).getTime();
+      const incomingTs = new Date(t._editedAt        || t.date        || 0).getTime();
       if (incomingTs > existingTs) map.set(key, t);
     }
   }
 
-  // Sort by date desc, then id desc (stable order)
+  // Sort by date desc, then by id string desc (stable order)
   const merged = [...map.values()].sort((a, b) =>
-    b.date.localeCompare(a.date) || b.id - a.id
+    b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
   );
 
-  // nextId must be strictly above all existing ids
-  const maxId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
+  // nextId kept for backward compat with old numeric ids
+  const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
   const nextId = Math.max(
     Number(local.nextId  || 1),
     Number(remote.nextId || 1),
-    maxId + 1
+    maxNumericId + 1
   );
 
   return {
-    ...settingsSrc,           // categories, catUseEmoji, etc.
+    ...settingsSrc,
     txns:   merged,
     nextId: nextId,
     _lastModified: new Date().toISOString(),
@@ -6611,10 +6625,17 @@ async function driveAutoRestore() {
 // Runs once after login/token-restore. Merges both apps
 // with Drive silently. Shows indicator but no alert on success.
 async function _driveStartupSync() {
+  driveSetStatus('loading', 'Проверка Drive...');
   try {
     await driveEnsureFolder();
     await driveFetchFileMeta();
     _driveUpdateFileMeta();
+
+    const hasOps = !!driveFileMeta['ops'];
+    const hasInv = !!driveFileMeta['inv'];
+    if (hasOps || hasInv) {
+      driveSetStatus('loading', 'Синхронизация...');
+    }
 
     let mergedAnything = false;
 
