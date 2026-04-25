@@ -10,15 +10,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-
-/* ══════════════════════════════════════════════════
-   complex operations
-══════════════════════════════════════════════════ */
-
-
-
-
-   
 /* ══════════════════════════════════════════════════
    DESIGN TOKENS
 ══════════════════════════════════════════════════ */
@@ -1156,6 +1147,54 @@ select.filter-input option { background: var(--bg2); }
 }
 
 /* ══════════════════════════════════════════════════
+   SNAPSHOT ARCHIVE
+══════════════════════════════════════════════════ */
+.snap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+.snap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color .12s;
+}
+.snap-item:hover { border-color: var(--line2); }
+.snap-item-info { flex: 1; min-width: 0; }
+.snap-item-label {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.snap-item-meta {
+  font-size: 9.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.snap-item-badges { display: flex; gap: 4px; flex-shrink: 0; }
+.snap-badge {
+  font-size: 8.5px;
+  padding: 2px 6px;
+  border-radius: 20px;
+  letter-spacing: .04em;
+}
+.snap-badge-local { background: var(--blue-bg); color: var(--blue); }
+.snap-badge-drive { background: var(--green-bg); color: var(--green); }
+.snap-badge-local-only { background: var(--amber-bg); color: var(--amber); }
+.snap-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════
    MOBILE-ONLY ELEMENTS — скрыты по умолчанию на десктопе
 ══════════════════════════════════════════════════ */
 .mobile-fab        { display: none; }
@@ -1668,6 +1707,7 @@ select.filter-input option { background: var(--bg2); }
     <div class="sidebar-footer" style="display:flex;flex-direction:column;gap:6px;">
       <button class="btn btn-primary btn-full" onclick="opsOpenAddModal();closeSidebar()">+ Операция</button>
       <button class="btn btn-full btn-sm btn-sync" id="ops-sync-btn" onclick="driveSyncApp('ops');closeSidebar()">⟳ Sync Drive</button>
+      <button class="btn btn-full btn-sm" onclick="snapOpenModal();closeSidebar()">◈ Архив</button>
       <button class="btn btn-full btn-sm" onclick="opsExportJSON();closeSidebar()">↓ JSON</button>
       <button class="btn btn-full btn-sm" onclick="opsExportXLSX();closeSidebar()">↓ Excel</button>
       <label class="btn btn-full btn-sm" style="cursor:pointer;" onclick="closeSidebar()">↑ Импорт
@@ -1868,6 +1908,9 @@ select.filter-input option { background: var(--bg2); }
       <div class="sidebar-btn-group" style="padding-top:0;gap:4px;">
         <button class="btn btn-sm" style="flex:1;" onclick="invOpenConfig();closeSidebar()">⚙ Блоки</button>
         <button class="btn btn-sm" style="flex:1;" onclick="invOpenDiff();closeSidebar()">⇄ Сравнить</button>
+      </div>
+      <div class="sidebar-btn-group" style="padding-top:0;">
+        <button class="btn btn-sm btn-full" onclick="snapOpenModal();closeSidebar()">◈ Архив</button>
       </div>
       <div class="sidebar-btn-group" style="padding-top:0;">
         <button class="btn btn-sm btn-full" onclick="invOpenGoals();closeSidebar()">◎ Цели</button>
@@ -5483,6 +5526,50 @@ function themeImport(input) {
 </div>
 
 <!-- ══════════════════════════════════════════════
+     MODAL: АРХИВ ТОЧЕК СОХРАНЕНИЯ
+══════════════════════════════════════════════ -->
+<div class="overlay" id="snap-modal">
+  <div class="modal" style="width:560px;max-width:96vw;">
+    <div class="modal-title">◈ Архив — точки сохранения</div>
+
+    <!-- Create new snapshot -->
+    <div class="drive-section" style="margin-bottom:12px;">
+      <div class="drive-section-title">Создать точку сохранения</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-field" style="flex:1;min-width:180px;margin-bottom:0;">
+          <label>Название</label>
+          <input type="text" id="snap-label-input" placeholder="например: до закупки / конец месяца" maxlength="80"
+                 onkeydown="if(event.key==='Enter')snapCreate()">
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;padding-bottom:1px;">
+          <button class="btn btn-sm" onclick="snapCreate(false)" title="Сохранить только локально">💾 Локально</button>
+          <button class="btn btn-sm btn-sync" id="snap-drive-btn" onclick="snapCreate(true)" title="Сохранить и загрузить на Drive">☁ + Drive</button>
+        </div>
+      </div>
+      <div id="snap-create-status" style="font-size:9.5px;margin-top:6px;min-height:14px;"></div>
+    </div>
+
+    <!-- List of snapshots -->
+    <div class="drive-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="drive-section-title" style="margin-bottom:0;">Сохранённые точки</div>
+        <div style="font-size:9px;color:var(--muted2);" id="snap-count-label"></div>
+      </div>
+      <div class="snap-list" id="snap-list">
+        <div style="color:var(--muted);font-size:11px;text-align:center;padding:20px 0;">Точек сохранения нет</div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <div class="modal-actions-left" style="display:flex;gap:6px;">
+        <button class="btn btn-sm btn-sync" id="snap-sync-list-btn" onclick="snapSyncListFromDrive()" title="Обновить список из Drive">☁ Список с Drive</button>
+      </div>
+      <button class="btn" onclick="snapCloseModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
      MODAL: GOOGLE DRIVE SYNC
 ══════════════════════════════════════════════ -->
 <div class="overlay" id="drive-modal">
@@ -5547,6 +5634,402 @@ function themeImport(input) {
     </div>
   </div>
 </div>
+
+<script>
+/* ══════════════════════════════════════════════════
+   SNAPSHOT ARCHIVE ENGINE
+   Точки сохранения — локально (localStorage) + Google Drive
+   Хранилище: localStorage key "finSnapshots"
+   Drive: папка FinanceApp/snapshots/*.json
+══════════════════════════════════════════════════ */
+
+const SNAP_LS_KEY        = 'finSnapshots';
+const SNAP_DRIVE_FOLDER  = 'snapshots';
+const SNAP_MAX_LOCAL     = 50; // защита от переполнения localStorage
+let   snapDriveFolderId  = null; // кэш id подпапки snapshots на Drive
+
+// ── Storage helpers ───────────────────────────────
+function snapLoadAll() {
+  try { const s = localStorage.getItem(SNAP_LS_KEY); if (s) return JSON.parse(s); } catch(e) {}
+  return [];
+}
+function snapSaveAll(list) {
+  try { localStorage.setItem(SNAP_LS_KEY, JSON.stringify(list)); } catch(e) {
+    snapStatus('Ошибка: localStorage переполнен', 'err');
+  }
+}
+
+// ── Modal ─────────────────────────────────────────
+function snapOpenModal() {
+  const drvBtn = document.getElementById('snap-drive-btn');
+  if (drvBtn) drvBtn.disabled = !driveToken;
+  const syncBtn = document.getElementById('snap-sync-list-btn');
+  if (syncBtn) syncBtn.disabled = !driveToken;
+  snapRenderList();
+  document.getElementById('snap-modal').classList.add('is-open');
+}
+function snapCloseModal() {
+  document.getElementById('snap-modal').classList.remove('is-open');
+}
+
+// ── Status line inside modal ──────────────────────
+function snapStatus(msg, type = 'info') {
+  const el = document.getElementById('snap-create-status');
+  if (!el) return;
+  const colors = { ok: 'var(--green)', err: 'var(--red)', warn: 'var(--amber)', info: 'var(--muted)' };
+  el.style.color = colors[type] || 'var(--muted)';
+  el.textContent = msg;
+}
+
+// ── Build a snapshot payload ──────────────────────
+function snapBuildPayload(label) {
+  return {
+    id: 'snap_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    label: label,
+    createdAt: new Date().toISOString(),
+    ops: JSON.parse(JSON.stringify(opsState)),
+    inv: JSON.parse(JSON.stringify(invState)),
+  };
+}
+
+// ── Create snapshot ───────────────────────────────
+async function snapCreate(withDrive) {
+  const labelInput = document.getElementById('snap-label-input');
+  const label = (labelInput.value || '').trim() || ('Точка ' + new Date().toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }));
+
+  const payload = snapBuildPayload(label);
+  const list = snapLoadAll();
+
+  // Guard against localStorage overflow
+  if (list.length >= SNAP_MAX_LOCAL) {
+    snapStatus(`Достигнут лимит ${SNAP_MAX_LOCAL} локальных точек — удали старые`, 'warn');
+    return;
+  }
+
+  // Meta record (without heavy data for the list)
+  const meta = {
+    id: payload.id,
+    label: payload.label,
+    createdAt: payload.createdAt,
+    onDrive: false,
+    driveName: null,
+  };
+
+  // Save payload locally (full data)
+  const dataKey = SNAP_LS_KEY + '_data_' + payload.id;
+  try { localStorage.setItem(dataKey, JSON.stringify(payload)); } catch(e) {
+    snapStatus('Ошибка сохранения: localStorage переполнен', 'err');
+    return;
+  }
+
+  list.unshift(meta); // newest first
+  snapSaveAll(list);
+  labelInput.value = '';
+
+  if (withDrive) {
+    if (!driveToken) { meta.onDrive = false; snapSaveAll(list); snapStatus('Нет подключения к Drive — сохранено только локально', 'warn'); snapRenderList(); return; }
+    snapStatus('Загрузка на Drive…', 'info');
+    try {
+      await snapEnsureFolder();
+      const fname = 'snap_' + payload.id + '.json';
+      await snapUploadToDrive(fname, payload);
+      meta.onDrive   = true;
+      meta.driveName = fname;
+      snapSaveAll(list);
+      snapStatus('✓ Сохранено локально и на Drive', 'ok');
+    } catch(e) {
+      snapStatus('Сохранено локально, Drive ошибка: ' + e.message, 'warn');
+    }
+  } else {
+    snapStatus('✓ Сохранено локально', 'ok');
+  }
+
+  snapRenderList();
+  syncLog('◈ Создана точка сохранения: ' + label, 'ok');
+}
+
+// ── Restore snapshot ──────────────────────────────
+async function snapRestore(id) {
+  if (!confirm('Восстановить эту точку сохранения?\nТекущие данные будут заменены!')) return;
+
+  let payload = null;
+
+  // Try local data first
+  const dataKey = SNAP_LS_KEY + '_data_' + id;
+  try { const s = localStorage.getItem(dataKey); if (s) payload = JSON.parse(s); } catch(e) {}
+
+  // If not local — try Drive
+  if (!payload) {
+    const list = snapLoadAll();
+    const meta = list.find(s => s.id === id);
+    if (meta && meta.onDrive && meta.driveName && driveToken) {
+      snapStatus('Загрузка с Drive…', 'info');
+      try {
+        payload = await snapDownloadFromDrive(meta.driveName);
+      } catch(e) {
+        snapStatus('Ошибка загрузки с Drive: ' + e.message, 'err');
+        return;
+      }
+    }
+  }
+
+  if (!payload) {
+    alert('Данные точки не найдены ни локально, ни на Drive.');
+    return;
+  }
+
+  // Restore state
+  if (payload.ops) { opsState = payload.ops; opsSave(); opsReRenderCurrent(); }
+  if (payload.inv) { invState = payload.inv; invSaveState(); invLoadRates(); invCurId = null; invRenderSidebar(); }
+
+  snapStatus('✓ Восстановлено из: ' + payload.label, 'ok');
+  syncLog('◈ Восстановлена точка: ' + payload.label, 'ok');
+  snapCloseModal();
+}
+
+// ── Delete snapshot ───────────────────────────────
+async function snapDelete(id) {
+  const list = snapLoadAll();
+  const meta = list.find(s => s.id === id);
+  if (!meta) return;
+  if (!confirm('Удалить точку сохранения «' + meta.label + '»?')) return;
+
+  // Remove local data
+  try { localStorage.removeItem(SNAP_LS_KEY + '_data_' + id); } catch(e) {}
+
+  // Remove from Drive if exists
+  if (meta.onDrive && meta.driveName && driveToken) {
+    try {
+      await snapDeleteFromDrive(meta.driveName);
+    } catch(e) { /* not critical */ }
+  }
+
+  const newList = list.filter(s => s.id !== id);
+  snapSaveAll(newList);
+  snapRenderList();
+  syncLog('◈ Удалена точка: ' + meta.label, 'info');
+}
+
+// ── Upload snapshot to Drive only ─────────────────
+async function snapUploadToDrive_byId(id) {
+  const list = snapLoadAll();
+  const meta = list.find(s => s.id === id);
+  if (!meta) return;
+  if (!driveToken) { alert('Нет подключения к Drive'); return; }
+
+  let payload = null;
+  try { const s = localStorage.getItem(SNAP_LS_KEY + '_data_' + id); if (s) payload = JSON.parse(s); } catch(e) {}
+  if (!payload) { alert('Локальные данные точки не найдены'); return; }
+
+  snapStatus('Загрузка на Drive…', 'info');
+  try {
+    await snapEnsureFolder();
+    const fname = 'snap_' + payload.id + '.json';
+    await snapUploadToDrive(fname, payload);
+    meta.onDrive   = true;
+    meta.driveName = fname;
+    snapSaveAll(list);
+    snapStatus('✓ Загружено на Drive', 'ok');
+    snapRenderList();
+  } catch(e) {
+    snapStatus('Ошибка Drive: ' + e.message, 'err');
+  }
+}
+
+// ── Download from Drive to local ──────────────────
+async function snapDownloadToLocal(id) {
+  const list = snapLoadAll();
+  const meta = list.find(s => s.id === id);
+  if (!meta || !meta.onDrive) return;
+  if (!driveToken) { alert('Нет подключения к Drive'); return; }
+
+  snapStatus('Загрузка с Drive…', 'info');
+  try {
+    const payload = await snapDownloadFromDrive(meta.driveName);
+    if (!payload) { snapStatus('Файл не найден на Drive', 'warn'); return; }
+    const dataKey = SNAP_LS_KEY + '_data_' + id;
+    localStorage.setItem(dataKey, JSON.stringify(payload));
+    snapStatus('✓ Скачано локально', 'ok');
+    snapRenderList();
+  } catch(e) {
+    snapStatus('Ошибка Drive: ' + e.message, 'err');
+  }
+}
+
+// ── Sync snapshot list from Drive (adds missing) ──
+async function snapSyncListFromDrive() {
+  if (!driveToken) { alert('Сначала войди в Google Drive'); return; }
+  const btn = document.getElementById('snap-sync-list-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  snapStatus('Сканирование Drive…', 'info');
+  try {
+    await snapEnsureFolder();
+    // List files in snapshots subfolder
+    let query = `'${snapDriveFolderId}' in parents and mimeType='application/json' and trashed=false`;
+    let url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&pageSize=200`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + driveToken } });
+    if (!r.ok) throw new Error('Drive list ' + r.status);
+    const data = await r.json();
+    const driveFiles = data.files || [];
+
+    const list = snapLoadAll();
+    let added = 0;
+    for (const f of driveFiles) {
+      if (!f.name.startsWith('snap_')) continue;
+      const alreadyInList = list.find(s => s.driveName === f.name);
+      if (!alreadyInList) {
+        // Download to get label & createdAt
+        try {
+          const payload = await snapDownloadFromDriveById(f.id);
+          if (!payload) continue;
+          const meta = {
+            id: payload.id || f.name.replace('.json',''),
+            label: payload.label || f.name,
+            createdAt: payload.createdAt || f.modifiedTime,
+            onDrive: true,
+            driveName: f.name,
+          };
+          list.push(meta);
+          added++;
+        } catch(e) { /* skip broken */ }
+      } else {
+        alreadyInList.onDrive = true;
+        if (!alreadyInList.driveName) alreadyInList.driveName = f.name;
+      }
+    }
+    // sort newest first
+    list.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    snapSaveAll(list);
+    snapStatus('✓ Найдено на Drive: ' + driveFiles.length + (added ? `, добавлено новых: ${added}` : ''), 'ok');
+    snapRenderList();
+  } catch(e) {
+    snapStatus('Ошибка: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = !driveToken; btn.textContent = '☁ Список с Drive'; }
+  }
+}
+
+// ── Render list ───────────────────────────────────
+function snapRenderList() {
+  const list = snapLoadAll();
+  const container = document.getElementById('snap-list');
+  const countEl   = document.getElementById('snap-count-label');
+  if (!container) return;
+  if (countEl) countEl.textContent = list.length ? `${list.length} точек` : '';
+
+  if (!list.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px 0;">Точек сохранения нет</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(meta => {
+    const hasLocal = !!localStorage.getItem(SNAP_LS_KEY + '_data_' + meta.id);
+    const dt = meta.createdAt ? new Date(meta.createdAt).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+    let badges = '';
+    if (hasLocal && meta.onDrive) badges = '<span class="snap-badge snap-badge-drive">Local + Drive</span>';
+    else if (hasLocal)            badges = '<span class="snap-badge snap-badge-local-only">Только Local</span>';
+    else if (meta.onDrive)        badges = '<span class="snap-badge snap-badge-drive">Только Drive</span>';
+
+    // Action buttons
+    let actions = '';
+    // Upload to drive (only if local and drive connected)
+    if (hasLocal && !meta.onDrive && driveToken)
+      actions += `<button class="btn btn-sm" title="Загрузить на Drive" onclick="snapUploadToDrive_byId('${meta.id}')">☁↑</button>`;
+    // Download to local (only if on drive and no local)
+    if (meta.onDrive && !hasLocal && driveToken)
+      actions += `<button class="btn btn-sm" title="Скачать с Drive" onclick="snapDownloadToLocal('${meta.id}')">☁↓</button>`;
+    actions += `<button class="btn btn-sm btn-primary" title="Восстановить" onclick="snapRestore('${meta.id}')">↺ Загрузить</button>`;
+    actions += `<button class="btn btn-sm btn-danger" title="Удалить" onclick="snapDelete('${meta.id}')">✕</button>`;
+
+    return `<div class="snap-item">
+      <div class="snap-item-info">
+        <div class="snap-item-label" title="${meta.label}">${meta.label}</div>
+        <div class="snap-item-meta">${dt}</div>
+      </div>
+      <div class="snap-item-badges">${badges}</div>
+      <div class="snap-item-actions">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Drive subfolder helpers ───────────────────────
+async function snapEnsureFolder() {
+  if (snapDriveFolderId) return;
+  // Ensure parent FinanceApp folder
+  await driveEnsureFolder();
+  // Find or create "snapshots" subfolder
+  let q = `name='${SNAP_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and '${driveFolderId}' in parents and trashed=false`;
+  let r = await fetch(`${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (!r.ok) throw new Error('Drive folder check ' + r.status);
+  let d = await r.json();
+  if (d.files && d.files.length) {
+    snapDriveFolderId = d.files[0].id;
+    return;
+  }
+  // Create
+  r = await fetch(`${DRIVE_API}/files`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + driveToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: SNAP_DRIVE_FOLDER, mimeType: 'application/vnd.google-apps.folder', parents: [driveFolderId] })
+  });
+  if (!r.ok) throw new Error('Drive folder create ' + r.status);
+  d = await r.json();
+  snapDriveFolderId = d.id;
+}
+
+async function snapUploadToDrive(fname, data) {
+  // Check if file already exists
+  let existingId = null;
+  const q = `name='${fname}' and '${snapDriveFolderId}' in parents and trashed=false`;
+  const check = await fetch(`${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (check.ok) { const cd = await check.json(); if (cd.files && cd.files.length) existingId = cd.files[0].id; }
+
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(existingId ? {} : { name: fname, parents: [snapDriveFolderId] })], { type: 'application/json' }));
+  form.append('file', blob);
+
+  const url = existingId
+    ? `${DRIVE_UPLOAD_API}/files/${existingId}?uploadType=multipart`
+    : `${DRIVE_UPLOAD_API}/files?uploadType=multipart`;
+  const method = existingId ? 'PATCH' : 'POST';
+  const r = await fetch(url, { method, headers: { Authorization: 'Bearer ' + driveToken }, body: form });
+  if (r.status === 401) { driveClearToken(); driveToken = null; throw new Error('Токен истёк'); }
+  if (!r.ok) throw new Error('Snap upload ' + r.status);
+}
+
+async function snapDownloadFromDrive(fname) {
+  await snapEnsureFolder();
+  const q = `name='${fname}' and '${snapDriveFolderId}' in parents and trashed=false`;
+  const check = await fetch(`${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (!check.ok) throw new Error('Drive search ' + check.status);
+  const cd = await check.json();
+  if (!cd.files || !cd.files.length) return null;
+  return snapDownloadFromDriveById(cd.files[0].id);
+}
+
+async function snapDownloadFromDriveById(fileId) {
+  const r = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`,
+    { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (!r.ok) throw new Error('Snap download ' + r.status);
+  return r.json();
+}
+
+async function snapDeleteFromDrive(fname) {
+  await snapEnsureFolder();
+  const q = `name='${fname}' and '${snapDriveFolderId}' in parents and trashed=false`;
+  const check = await fetch(`${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    { headers: { Authorization: 'Bearer ' + driveToken } });
+  if (!check.ok) return;
+  const cd = await check.json();
+  if (!cd.files || !cd.files.length) return;
+  await fetch(`${DRIVE_API}/files/${cd.files[0].id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + driveToken } });
+}
+</script>
 
 <script>
 /* ══════════════════════════════════════════════════
