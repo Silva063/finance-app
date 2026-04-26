@@ -626,8 +626,25 @@ select.filter-input option { background: var(--bg2); }
   border-radius: var(--radius-sm);
   outline: none;
   transition: border-color .12s;
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
+.rate-field::-webkit-outer-spin-button,
+.rate-field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .rate-field:focus { border-color: var(--acc); }
+
+/* Remove spinners from ALL number inputs in rates modal */
+#inv-rates-modal-body input[type=number],
+#inv-rates-modal input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#inv-rates-modal-body input[type=number]::-webkit-outer-spin-button,
+#inv-rates-modal-body input[type=number]::-webkit-inner-spin-button,
+#inv-rates-modal input[type=number]::-webkit-outer-spin-button,
+#inv-rates-modal input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
 
 /* ══════════════════════════════════════════════════
    INV: INVENTORY GRID
@@ -1592,6 +1609,39 @@ select.filter-input option { background: var(--bg2); }
   .page { padding: 20px 20px; }
   .stat-card-value { font-size: 16px; }
 }
+/* ── Toast / inline confirm ─────────────────────── */
+#toast-container {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  background: var(--bg3); border: 1px solid var(--line2); color: var(--text);
+  font-size: 12px; padding: 9px 16px; border-radius: var(--radius-sm);
+  box-shadow: 0 4px 20px rgba(0,0,0,.5); pointer-events: auto;
+  animation: toastIn .18s ease; max-width: min(340px, 90vw); text-align: center;
+}
+.toast.toast-err  { border-color: var(--red);   color: var(--red); }
+.toast.toast-ok   { border-color: var(--green);  color: var(--green); }
+@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+.inline-err {
+  font-size: 10px; color: var(--red); margin-top: 5px;
+  padding: 4px 8px; background: rgba(255,80,80,.08);
+  border-radius: var(--radius-sm); border: 1px solid rgba(255,80,80,.2);
+}
+
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-box {
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius);
+  padding: 20px 24px; max-width: min(360px, 90vw); width: 100%;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6);
+}
+.confirm-box .confirm-msg { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+.confirm-box .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -2810,12 +2860,15 @@ function opsSaveOp() {
   if (driveToken) driveDebouncedPush('ops');
 }
 function opsDeleteOp() {
-  if (!opsEditId || !confirm('Удалить операцию?')) return;
-  // Soft delete: mark as deleted and propagate via merge
-  const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
-  if (t) { t._deleted = true; t._deletedAt = new Date().toISOString(); t._editedAt = t._deletedAt; }
-  opsSave(); opsCloseModal(); opsReRenderCurrent();
-  if (driveToken) driveDebouncedPush('ops');
+  if (!opsEditId) return;
+  appConfirm('Удалить операцию?').then(ok => {
+    if (!ok) return;
+    // Soft delete: mark as deleted and propagate via merge
+    const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
+    if (t) { t._deleted = true; t._deletedAt = new Date().toISOString(); t._editedAt = t._deletedAt; }
+    opsSave(); opsCloseModal(); opsReRenderCurrent();
+    if (driveToken) driveDebouncedPush('ops');
+  });
 }
 
 /* ══════════════════════════════════════════════════
@@ -2999,7 +3052,7 @@ function opsImportFile(input) {
       try {
         const imp = JSON.parse(e.target.result);
         if (!imp.txns) throw new Error('bad format');
-        if (!confirm(`Импортировать ${imp.txns.length} операций? Текущие данные заменятся.`)) return;
+        // confirm removed - sandbox incompatible
         // migrate categories
         if (!imp.categories) imp.categories = OPS_DEFAULT_CATS;
         if (imp.catUseEmoji === undefined) imp.catUseEmoji = false;
@@ -3012,7 +3065,7 @@ function opsImportFile(input) {
           }
         }
         opsState = imp; opsSave(); opsReRenderCurrent();
-      } catch(err) { alert('Ошибка: ' + err.message); }
+      } catch(err) { showErr('Ошибка: ' + err.message); }
     };
     r.readAsText(file);
   } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
@@ -3043,14 +3096,14 @@ function opsImportFile(input) {
           const comment = String(commentRaw||'').trim();
           imported.push({ id: ++maxId, date, type, way, amount, comment });
         }
-        if (!imported.length) { alert('Не удалось распознать данные.'); return; }
-        if (!confirm(`Добавить ${imported.length} операций к существующим?`)) return;
+        if (!imported.length) { showErr('Не удалось распознать данные.'); return; }
+        // confirm removed - sandbox incompatible
         opsState.txns.push(...imported); opsState.nextId = maxId + 1;
         opsSave(); opsReRenderCurrent();
-      } catch(err) { alert('Ошибка: ' + err.message); }
+      } catch(err) { showErr('Ошибка: ' + err.message); }
     };
     r.readAsBinaryString(file);
-  } else { alert('Поддерживаются форматы: .json, .xlsx, .xls'); }
+  } else { showErr('Поддерживаются форматы: .json, .xlsx, .xls'); }
   input.value = '';
 }
 
@@ -3538,13 +3591,15 @@ function invSaveNote(recId, val) {
 
 // ── Delete ────────────────────────────────────────
 function invDelete(recId) {
-  if (!confirm('Удалить эту инвентаризацию?')) return;
-  // Soft delete to propagate via merge
-  const rec = invState.dates.find(r => r.id === recId);
-  if (rec) { rec._deleted = true; rec._deletedAt = new Date().toISOString(); rec._editedAt = rec._deletedAt; }
-  invSaveState(); invCurId = null; invRenderSidebar();
-  document.getElementById('inv-main-area').innerHTML = `<div class="empty-state"><div class="empty-state-glyph">—</div><div class="empty-state-text">Выбери дату или создай новую</div></div>`;
-  if (driveToken) driveDebouncedPush('inv');
+  appConfirm('Удалить эту инвентаризацию?').then(ok => {
+    if (!ok) return;
+    // Soft delete to propagate via merge
+    const rec = invState.dates.find(r => r.id === recId);
+    if (rec) { rec._deleted = true; rec._deletedAt = new Date().toISOString(); rec._editedAt = rec._deletedAt; }
+    invSaveState(); invCurId = null; invRenderSidebar();
+    document.getElementById('inv-main-area').innerHTML = `<div class="empty-state"><div class="empty-state-glyph">—</div><div class="empty-state-text">Выбери дату или создай новую</div></div>`;
+    if (driveToken) driveDebouncedPush('inv');
+  });
 }
 
 // ── Modal ─────────────────────────────────────────
@@ -3556,8 +3611,8 @@ function invOpenNewModal() {
 function invCloseModal() { document.getElementById('inv-modal').classList.remove('is-open'); }
 function invCreate() {
   const dateStr = document.getElementById('inv-new-date').value;
-  if (!dateStr) { alert('Выбери дату'); return; }
-  if (invState.dates.find(r => r.id === dateStr && !r._deleted)) { alert('Такая дата уже есть'); return; }
+  if (!dateStr) { showErr('Выбери дату'); return; }
+  if (invState.dates.find(r => r.id === dateStr && !r._deleted)) { showErr('Такая дата уже есть'); return; }
   const note   = document.getElementById('inv-new-note').value.trim();
   const sorted = [...invState.dates].filter(r => !r._deleted).sort((a,b) => b.date.localeCompare(a.date));
   let rec;
@@ -3592,7 +3647,7 @@ function invImport(input) {
     try {
       const imp = JSON.parse(e.target.result);
       if (!imp.dates || !Array.isArray(imp.dates)) throw new Error('bad format');
-      if (!confirm(`Импортировать ${imp.dates.length} записей? Текущие данные заменятся.`)) return;
+      // confirm removed - sandbox incompatible
       // migrate: if no sections/currencies, add defaults
       if (!imp.sections)   imp.sections   = INV_DEFAULT_SECTIONS;
       if (!imp.currencies) imp.currencies = INV_DEFAULT_CURRENCIES;
@@ -3600,7 +3655,7 @@ function invImport(input) {
       invState = imp; invSaveState(); invLoadRates(); invCurId = null;
       invRenderSidebar();
       invShowDashboard();
-    } catch(err) { alert('Ошибка чтения: ' + err.message); }
+    } catch(err) { showErr('Ошибка чтения: ' + err.message); }
   };
   r.readAsText(file);
   input.value = '';
@@ -4113,9 +4168,9 @@ function invSaveCurrency() {
   const editCode = document.getElementById('cur-edit-code').value;
   const code = document.getElementById('cur-code').value.trim().toUpperCase();
   const name = document.getElementById('cur-name').value.trim();
-  if (!code || !name) { alert('Заполни код и название'); return; }
+  if (!code || !name) { showInlineErr('cur-name', 'Заполни код и название'); return; }
   if (!invState.currencyList) invState.currencyList = [];
-  if (!editCode && invState.currencyList.find(c => c.code === code)) { alert(`Валюта ${code} уже существует`); return; }
+  if (!editCode && invState.currencyList.find(c => c.code === code)) { showInlineErr('cur-code', `Валюта ${code} уже существует`); return; }
   if (editCode) {
     const cur = invState.currencyList.find(c => c.code === editCode);
     if (cur) { cur.name = name; }
@@ -4130,13 +4185,15 @@ function invDeleteCurrency() {
   const code = document.getElementById('cur-edit-code').value;
   if (code === invBaseCurrency()) return;
   const usedBy = invSections().filter(s => s.currency === code);
-  if (usedBy.length) { alert(`Валюта ${code} используется блоком "${usedBy[0].name}". Сначала измени блок.`); return; }
-  if (!confirm(`Удалить валюту ${code}? Также удалятся все пары с ней.`)) return;
-  invState.currencyList = invState.currencyList.filter(c => c.code !== code);
-  invState.pairs = invState.pairs.filter(p => p.from !== code && p.to !== code);
-  invSaveState();
-  invCloseCurrencyModal();
-  invRenderConfigCurrencies();
+  if (usedBy.length) { showErr(`Валюта ${code} используется блоком "${usedBy[0].name}". Сначала измени блок.`); return; }
+  appConfirm(`Удалить валюту ${code}? Также удалятся все пары с ней.`).then(ok => {
+    if (!ok) return;
+    invState.currencyList = invState.currencyList.filter(c => c.code !== code);
+    invState.pairs = invState.pairs.filter(p => p.from !== code && p.to !== code);
+    invSaveState();
+    invCloseCurrencyModal();
+    invRenderConfigCurrencies();
+  });
 }
 
 // ── Block modal ───────────────────────────────────
@@ -4184,8 +4241,8 @@ function invSaveBlock() {
   const noms   = type === 'cash'
     ? nomsRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0).sort((a,b) => b-a)
     : [];
-  if (!name) { alert('Введи название блока'); return; }
-  if (type === 'cash' && noms.length === 0) { alert('Добавь хотя бы один номинал'); return; }
+  if (!name) { showInlineErr('blk-name', 'Введи название блока'); return; }
+  if (type === 'cash' && noms.length === 0) { showInlineErr('blk-noms', 'Добавь хотя бы один номинал'); return; }
 
   if (editId) {
     const sec = invState.sections.find(s => s.id === editId);
@@ -4219,13 +4276,15 @@ function invDeleteBlock() {
   const secId = document.getElementById('blk-edit-id').value;
   const sec = invSections().find(s => s.id === secId);
   if (!sec) return;
-  if (!confirm(`Удалить блок "${sec.name}"? Все данные этого блока во всех записях будут удалены.`)) return;
-  invState.sections = invState.sections.filter(s => s.id !== secId);
-  for (const rec of invState.dates) { delete rec.secs[secId]; }
-  invSaveState();
-  invCloseBlockModal();
-  invRenderConfigBlocks();
-  if (driveToken) driveDebouncedPush('inv');
+  appConfirm(`Удалить блок "${sec.name}"? Все данные этого блока во всех записях будут удалены.`).then(ok => {
+    if (!ok) return;
+    invState.sections = invState.sections.filter(s => s.id !== secId);
+    for (const rec of invState.dates) { delete rec.secs[secId]; }
+    invSaveState();
+    invCloseBlockModal();
+    invRenderConfigBlocks();
+    if (driveToken) driveDebouncedPush('inv');
+  });
 }
 
 /* ══════════════════════════════════════════════════
@@ -4425,26 +4484,34 @@ function opsCatUpdateColor(id, color) {
 }
 function opsCatEditIcon(id) {
   const c = opsCats().find(c=>c.id===id); if(!c) return;
-  const icon = prompt('Введи эмодзи для категории:', c.icon);
-  if (icon !== null) { c.icon = icon.trim() || c.icon; opsSave(); opsCatConfigRender(); }
+  appPrompt('Эмодзи для категории:', c.icon).then(icon => {
+    if (icon !== null) { c.icon = icon.trim() || c.icon; opsSave(); opsCatConfigRender(); }
+  });
 }
 function opsCatEditName(id, name) {
-  const newName = prompt('Название категории:', name);
-  if (newName !== null && newName.trim()) {
-    const c = opsCats().find(c=>c.id===id); if(c) { c.name=newName.trim(); opsSave(); opsCatConfigRender(); }
-  }
+  appPrompt('Название категории:', name).then(newName => {
+    if (newName !== null && newName.trim()) {
+      const c = opsCats().find(c=>c.id===id); if(c) { c.name=newName.trim(); opsSave(); opsCatConfigRender(); }
+    }
+  });
 }
 function opsCatDelete(id) {
-  if (!confirm('Удалить категорию? У операций с этой категорией она будет сброшена.')) return;
-  opsState.txns.forEach(t => { if(t.cat===id) t.cat=''; });
-  opsState.categories = opsCats().filter(c=>c.id!==id);
-  opsSave(); opsCatConfigRender();
+  const cat = opsCats().find(c=>c.id===id);
+  const label = cat ? cat.name : id;
+  appConfirm(`Удалить категорию "${label}"? У операций с ней она будет сброшена.`).then(ok => {
+    if (!ok) return;
+    opsState.txns.forEach(t => { if(t.cat===id) t.cat=''; });
+    opsState.categories = opsCats().filter(c=>c.id!==id);
+    opsSave(); opsCatConfigRender();
+  });
 }
 function opsCatAdd() {
-  const name = prompt('Название новой категории:'); if (!name?.trim()) return;
-  const id   = 'cat_' + Date.now();
-  opsCats().push({ id, name:name.trim(), color:'#6366f1', icon:'📌' });
-  opsSave(); opsCatConfigRender();
+  appPrompt('Название новой категории:', '').then(name => {
+    if (!name?.trim()) return;
+    const id = 'cat_' + Date.now();
+    opsCats().push({ id, name:name.trim(), color:'#6366f1', icon:'📌' });
+    opsSave(); opsCatConfigRender();
+  });
 }
 
 /* ══════════════════════════════════════════════════
@@ -4457,7 +4524,7 @@ function opsCatAdd() {
 function invOpenDiff() {
   const modal = document.getElementById('inv-diff-modal');
   const sorted = [...invState.dates].filter(r => !r._deleted).sort((a,b) => b.date.localeCompare(a.date));
-  if (sorted.length < 2) { alert('Нужно минимум 2 записи для сравнения'); return; }
+  if (sorted.length < 2) { showErr('Нужно минимум 2 записи для сравнения'); return; }
 
   const selA = document.getElementById('diff-sel-a');
   const selB = document.getElementById('diff-sel-b');
@@ -4665,8 +4732,8 @@ function invSaveGoal() {
   const colorVar = document.getElementById('goal-color-var').value;
   const color   = colorVar || document.getElementById('goal-color').value;
   const editId  = document.getElementById('goal-edit-id').value;
-  if (!name)   { alert('Введи название цели'); return; }
-  if (!amount) { alert('Введи сумму цели'); return; }
+  if (!name)   { showInlineErr('goal-name', 'Введи название цели'); return; }
+  if (!amount) { showInlineErr('goal-amount', 'Введи сумму цели'); return; }
   if (!invState.goals) invState.goals = [];
   if (editId) {
     const g = invState.goals.find(g => g.id === editId);
@@ -4707,71 +4774,139 @@ function invCancelEditGoal() {
 }
 
 function invDeleteGoal(id) {
-  if (!confirm('Удалить цель?')) return;
-  invState.goals = invGoals().filter(g => g.id !== id);
-  invSaveState();
-  if (driveToken) driveDebouncedPush('inv');
-  invRenderGoalsList();
-  if (!invCurId) invShowDashboard();
+  appConfirm('Удалить цель?').then(ok => {
+    if (!ok) return;
+    invState.goals = invGoals().filter(g => g.id !== id);
+    invSaveState();
+    if (driveToken) driveDebouncedPush('inv');
+    invRenderGoalsList();
+    if (!invCurId) invShowDashboard();
+  });
 }
 
-// Calculate progress toward a goal
-// Assets are valued at "buy" rate (bank buys FROM us → we get base)
-// Goal in foreign currency uses "sell" rate (we'd need to buy that currency)
+// ── Goal progress — правильная логика ────────────────────────────────────────
+//
+// Для каждого актива (валюта A) и цели (валюта T):
+//   1. Найти ВСЕ пути A→T и выбрать лучший (максимум результата)
+//   2. current = Σ(units_A × bestRate(A→T))
+//   3. pct = current / targetAmount × 100
+//
+// Это правильно, т.к. EUR→USD напрямую может быть выгоднее EUR→RUP→USD.
+// base-валюта используется только как ПРОМЕЖУТОЧНАЯ в графе, а не как
+// обязательная точка конвертации.
+//
+// Покупка: вы продаёте FROM банку (вы отдаёте актив, получаете целевую валюту)
+
 function invCalcGoalProgress(goal) {
-  const latest = [...invState.dates].filter(r => !r._deleted).sort((a,b) => b.date.localeCompare(a.date))[0];
-  const base = invBaseCurrency();
-  if (!latest) return { current: 0, pct: 0, baseCurrent: 0, baseTarget: 0, targetCur: goal.currency, convPath: [], optimalPath: null };
+  const latest = [...invState.dates].filter(r => !r._deleted)
+    .sort((a,b) => b.date.localeCompare(a.date))[0];
+  const base      = invBaseCurrency();
   const targetCur = goal.currency;
   const targetAmt = goal.amount;
 
-  // Calculate total assets in base currency (using "buy" rate — we sell assets to bank)
-  let baseCurrent = 0;
+  const empty = { current:0, pct:0, targetCur, targetAmt,
+    assetBreakdown:[], globalStrategies:[], base };
+  if (!latest) return empty;
+
+  const assetBreakdown = [];
+  let totalInTarget = 0;
+
   for (const sec of invSections()) {
-    if (sec.ekosh) {
-      const val = latest.secs[sec.id]?.val || 0;
-      // ekosh balance is stored in sec.currency units
-      const rate = sec.currency === base ? 1 : (invConvertRate(sec.currency, base, 'buy') || 1);
-      baseCurrent += val * rate;
-    } else {
-      const totalUnits = sec.noms.reduce((a,n) => a + (latest.secs[sec.id]?.[n]||0)*n, 0);
-      const rate = sec.currency === base ? 1 : (invConvertRate(sec.currency, base, 'buy') || 1);
-      baseCurrent += totalUnits * rate;
+    let units = sec.ekosh
+      ? (latest.secs[sec.id]?.val || 0)
+      : sec.noms.reduce((a,n) => a + (latest.secs[sec.id]?.[n]||0)*n, 0);
+    if (units === 0) continue;
+
+    const srcCur = sec.currency;
+
+    if (srcCur === targetCur) {
+      // Уже в целевой валюте
+      totalInTarget += units;
+      assetBreakdown.push({
+        secName: sec.name, currency: srcCur, units,
+        bestResult: units, bestRate: 1,
+        paths: [{ steps:[], totalRate:1, amountResult:units, label:'уже в целевой валюте' }],
+        isTarget: true
+      });
+      continue;
     }
+
+    // Найти все пути srcCur → targetCur
+    // Направление: мы «продаём» srcCur (отдаём банку) — buy direction на каждом шаге
+    const allPaths = _findAllPathsDirected(srcCur, targetCur, 4);
+
+    if (!allPaths.length) {
+      // Путь не найден
+      assetBreakdown.push({
+        secName: sec.name, currency: srcCur, units,
+        bestResult: 0, bestRate: 0,
+        paths: [],
+        isTarget: false,
+        noPath: true
+      });
+      continue;
+    }
+
+    const rankedPaths = allPaths.map(p => ({
+      steps: p.path,
+      totalRate: p.totalRate,
+      amountResult: units * p.totalRate
+    }));
+
+    const best = rankedPaths[0];
+    totalInTarget += best.amountResult;
+
+    assetBreakdown.push({
+      secName: sec.name, currency: srcCur, units,
+      bestResult: best.amountResult,
+      bestRate: best.totalRate,
+      paths: rankedPaths.slice(0, 3),
+      isTarget: false
+    });
   }
 
-  // Target in base currency: to "get" targetCur, we need to buy it (sell rate)
-  let baseTarget, current, sellRate;
-  if (targetCur === base) {
-    baseTarget = targetAmt;
-    current    = baseCurrent;
-    sellRate   = 1;
-  } else {
-    sellRate  = invConvertRate(targetCur, base, 'sell') || 1;
-    baseTarget = targetAmt * sellRate;
-    current    = baseTarget > 0 ? (baseCurrent / sellRate) : 0;
-  }
+  const pct = targetAmt > 0 ? Math.min(100, (totalInTarget / targetAmt) * 100) : 0;
+  const remain = Math.max(0, targetAmt - totalInTarget);
 
-  const pct = baseTarget > 0 ? Math.min(100, (baseCurrent / baseTarget) * 100) : 0;
-
-  // Conversion path details
-  const convPath = targetCur !== base ? (invConvertPath(targetCur, base, 'sell') || []) : [];
-
-  // Optimal strategy: find best multi-hop conversion from base to targetCur
-  // Try all possible intermediate currencies
-  const optimalPath = _findOptimalConversion(base, targetCur, baseCurrent);
-
-  return { current, pct, baseCurrent, baseTarget, sellRate, targetCur, convPath, optimalPath };
+  return {
+    current: totalInTarget,
+    pct,
+    targetCur,
+    targetAmt,
+    remain,
+    assetBreakdown,
+    base
+  };
 }
 
 /**
- * Find all possible conversion paths from `from` to `to` and return ranked list.
- * direction: you want to convert `from` → `to` (you spend `from`, get `to`).
- * This means for each hop: bank sells TO to you → direction='sell' for that pair.
+ * Find all paths from `from` → `to` using DFS.
+ * At each hop we "sell" the current currency to the bank → use 'buy' rate.
+ * (bank buys FROM from us, we receive TO)
+ *
+ * Edge logic for edge(A → B):
+ *   direct pair (A/B): rate = pair.buy  (bank buys A from us, pays B)
+ *   reverse pair (B/A): rate = 1/pair.sell  (bank sells A to us for B → per 1A we spend pair.sell B,
+ *                                            so per 1 of our A we get 1/pair.sell of... wait no)
+ *
+ * Clearer: we HAVE currency A, want B.
+ *   Direct pair A/B exists: bank buys A at pair.buy → we get pair.buy units of B per 1A ✓
+ *   Reverse pair B/A exists: bank sells B to us. "sell" = price in A per 1B.
+ *     So for 1A we get 1/pair.sell of B. ✓
  */
-function _findAllPaths(from, to, maxHops) {
+function _findAllPathsDirected(from, to, maxHops) {
   const pairs = invPairs();
   const results = [];
+
+  function edgeRate(a, b) {
+    const direct = pairs.find(p => p.from === a && p.to === b);
+    if (direct) return { rate: direct.buy, pair: direct, reversed: false,
+      label: `${direct.from}/${direct.to} покупка ×${direct.buy}` };
+    const rev = pairs.find(p => p.from === b && p.to === a);
+    if (rev) return { rate: 1 / rev.sell, pair: rev, reversed: true,
+      label: `${rev.from}/${rev.to} обратная продажа ×${(1/rev.sell).toFixed(6)}` };
+    return null;
+  }
 
   function dfs(cur, path, rateProduct, visited) {
     if (path.length > maxHops) return;
@@ -4779,40 +4914,26 @@ function _findAllPaths(from, to, maxHops) {
       results.push({ path: [...path], totalRate: rateProduct });
       return;
     }
-    // Try all pairs FROM cur
+    // All neighbours
+    const neighbours = new Set();
     for (const p of pairs) {
-      let next = null, r = null, stepLabel = '', reversed = false;
-      if (p.from === cur && !visited.has(p.to)) {
-        next = p.to; r = p.buy; stepLabel = `${p.from}/${p.to} buy=${p.buy}`; reversed = false;
-      } else if (p.to === cur && !visited.has(p.from)) {
-        // Use reverse: bank sells TO (=cur's pair.from) to us for cur
-        next = p.from; r = 1/p.sell; stepLabel = `rev ${p.from}/${p.to} sell=${p.sell}`; reversed = true;
-      }
-      if (next && r > 0) {
-        visited.add(next);
-        path.push({ from: cur, to: next, rate: r, pair: p, reversed });
-        dfs(next, path, rateProduct * r, visited);
-        path.pop();
-        visited.delete(next);
-      }
+      if (p.from === cur && !visited.has(p.to))   neighbours.add(p.to);
+      if (p.to   === cur && !visited.has(p.from)) neighbours.add(p.from);
+    }
+    for (const next of neighbours) {
+      const e = edgeRate(cur, next);
+      if (!e || e.rate <= 0) continue;
+      visited.add(next);
+      path.push({ from: cur, to: next, rate: e.rate, label: e.label, pair: e.pair, reversed: e.reversed });
+      dfs(next, path, rateProduct * e.rate, visited);
+      path.pop();
+      visited.delete(next);
     }
   }
 
   dfs(from, [], 1, new Set([from]));
-  results.sort((a,b) => b.totalRate - a.totalRate);
+  results.sort((a, b) => b.totalRate - a.totalRate);
   return results;
-}
-
-function _findOptimalConversion(from, to, amountFrom) {
-  if (from === to) return null;
-  const allPaths = _findAllPaths(from, to, 4);
-  if (!allPaths.length) return null;
-  // Return top 3
-  return allPaths.slice(0, 3).map(p => ({
-    steps: p.path,
-    totalRate: p.totalRate,
-    amountResult: amountFrom * p.totalRate
-  }));
 }
 
 let _goalDnd = { fromId: null, touchTarget: null };
@@ -4914,63 +5035,96 @@ function _invGoalReorder(fromId, toId, after) {
 function invRenderGoalsList() {
   const goals = invGoals();
   const el = document.getElementById('inv-goals-list');
-  const base = invBaseCurrency();
   if (!goals.length) {
     el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:16px 0;font-size:12px;">Целей пока нет — добавь первую ниже</div>';
     return;
   }
+
+  const fmtN = (n, d=4) => n.toLocaleString('ru-RU', { maximumFractionDigits: d });
+  const fmtC = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+
   el.innerHTML = goals.map(g => {
-    const { current, pct, baseCurrent, baseTarget, sellRate, targetCur, convPath, optimalPath } = invCalcGoalProgress(g);
-    const fmtC   = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-    const remain = Math.max(0, g.amount - current);
-    const col    = g.color;
+    const { current, pct, targetCur, targetAmt, remain, assetBreakdown } = invCalcGoalProgress(g);
+    const col = g.color;
     const isDynamic = g.color.startsWith('var(');
 
-    // Conversion path detail
-    let pathHtml = '';
-    if (targetCur !== base && convPath && convPath.length) {
-      const steps = convPath.map(s => {
-        const rFmt = s.rate.toFixed(4);
-        return `<span style="color:var(--muted)">${s.from}→${s.to}</span> <span style="color:var(--text)">×${rFmt}</span>`;
-      }).join(' <span style="color:var(--muted2)">·</span> ');
-      pathHtml = `<div style="font-size:9px;color:var(--muted2);margin-top:4px;line-height:1.7;padding:4px 0;">
-        Текущий курс (продажа ${targetCur}→${base}): ${steps} = <b style="color:var(--text)">${sellRate.toFixed(4)} ${base}</b>
-      </div>`;
-    }
+    // ── Per-asset section ──────────────────────────────────────────
+    let assetsHtml = '';
+    if (assetBreakdown.length) {
+      assetsHtml = `
+      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px;">
+        <div style="font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;">
+          Активы → ${targetCur}
+          <span style="font-size:8px;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:6px;">(лучший курс для каждого блока)</span>
+        </div>
+        ${assetBreakdown.map(a => {
+          if (a.isTarget) {
+            return `<div style="padding:5px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;">
+              <span style="font-size:10px;color:var(--muted)">${a.secName} <span style="color:var(--muted2);font-size:9px;">(уже ${a.currency})</span></span>
+              <b style="font-size:11px;color:var(--green)">${fmtC(a.units)} ${targetCur}</b>
+            </div>`;
+          }
+          if (a.noPath) {
+            return `<div style="padding:5px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;">
+              <span style="font-size:10px;color:var(--muted)">${a.secName}</span>
+              <span style="font-size:10px;color:var(--red)">нет пути ${a.currency}→${targetCur}</span>
+            </div>`;
+          }
 
-    // Optimal strategy
-    let optHtml = '';
-    if (optimalPath && optimalPath.length) {
-      optHtml = `
-      <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;">
-        <div style="font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;">Стратегии: ${base} → ${targetCur} (на ${fmtC(baseCurrent)} ${base})</div>
-        ${optimalPath.map((op, idx) => {
-          const pathStr = [base, ...op.steps.map(s=>s.to)].join(' → ');
-          const isFirst = idx === 0;
-          return `<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;${idx>0?'border-top:1px solid var(--line);':''}">
-            <span style="font-size:10px;color:${isFirst?'var(--green)':'var(--muted2)'};flex-shrink:0;margin-top:1px;">${isFirst?'★':'·'}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:10px;color:${isFirst?'var(--text)':'var(--muted)'};">${pathStr}</div>
-              <div style="font-size:9px;color:var(--muted2);">
-                ${op.steps.map(s=>`${s.from}→${s.to} ×${s.rate.toFixed(4)}`).join(' → ')}
-              </div>
+          const best = a.paths[0];
+          // Steps for best path
+          const stepsHtml = best.steps.map((s, si) => {
+            const amtBefore = si === 0 ? a.units : (a.units * best.steps.slice(0,si).reduce((r,x)=>r*x.rate,1));
+            const amtAfter  = amtBefore * s.rate;
+            return `<div style="font-size:9px;color:var(--muted2);padding-left:10px;line-height:1.8;">
+              <span style="color:var(--muted)">${s.from}→${s.to}</span>
+              ${fmtN(amtBefore,4)} × ${fmtN(s.rate,6)} = <b style="color:var(--text)">${fmtN(amtAfter,4)}</b>
+              <span style="color:var(--muted2);font-size:8px;margin-left:4px;">${s.label}</span>
+            </div>`;
+          }).join('');
+
+          // Alt paths (collapsed)
+          const altPaths = a.paths.slice(1);
+          const altHtml = altPaths.length ? `
+            <div style="margin-top:4px;padding-left:10px;">
+              ${altPaths.map((ap, ai) => {
+                const pathStr = [a.currency, ...ap.steps.map(s=>s.to)].join('→');
+                const diff = ap.amountResult - best.amountResult;
+                return `<div style="font-size:9px;color:var(--muted2);line-height:1.7;">
+                  <span style="color:var(--muted2)">· ${pathStr}</span>
+                  = ${fmtC(ap.amountResult)} ${targetCur}
+                  <span style="color:var(--red);font-size:8px;">(−${fmtC(Math.abs(diff))})</span>
+                </div>`;
+              }).join('')}
+            </div>` : '';
+
+          return `<div style="padding:5px 0;border-bottom:1px solid var(--line);">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+              <span style="font-size:10px;color:var(--muted)">${a.secName}
+                <span style="color:var(--muted2);font-size:9px;">${fmtC(a.units)} ${a.currency}</span>
+              </span>
+              <span style="font-size:11px;">
+                <b style="color:var(--green)">${fmtC(best.amountResult)} ${targetCur}</b>
+                <span style="color:var(--muted2);font-size:9px;margin-left:4px;">×${fmtN(best.totalRate,6)}</span>
+              </span>
             </div>
-            <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:11px;color:${isFirst?'var(--green)':'var(--text)'};">${fmtC(op.amountResult)} ${targetCur}</div>
-              <div style="font-size:9px;color:var(--muted2);">совок. ×${op.totalRate.toFixed(6)}</div>
-            </div>
+            ${stepsHtml}
+            ${altHtml}
           </div>`;
         }).join('')}
+        <div style="display:flex;justify-content:flex-end;padding-top:6px;">
+          <span style="font-size:11px;font-weight:600;color:var(--green)">${fmtC(current)} ${targetCur} итого</span>
+        </div>
       </div>`;
     }
 
     return `
     <div class="goal-card" data-gid="${g.id}" draggable="false" style="border-left:4px solid ${col};">
       <div class="goal-card-header">
-        <span class="goal-drag-handle" style="cursor:grab;color:var(--muted2);font-size:14px;padding:2px 8px 2px 0;flex-shrink:0;touch-action:none;" title="Перетащи для сортировки">⠿</span>
+        <span class="goal-drag-handle" style="cursor:grab;color:var(--muted2);font-size:14px;padding:2px 8px 2px 0;flex-shrink:0;touch-action:none;">⠿</span>
         <div style="flex:1;min-width:0;">
-          <div class="goal-card-name">${g.name}${isDynamic ? ' <span style="font-size:8px;color:var(--muted2);">[тема]</span>' : ''}</div>
-          <div class="goal-card-target">Цель: ${fmtC(g.amount)} ${g.currency}</div>
+          <div class="goal-card-name">${g.name}${isDynamic?' <span style="font-size:8px;color:var(--muted2);">[тема]</span>':''}</div>
+          <div class="goal-card-target">Цель: ${fmtC(targetAmt)} ${targetCur}</div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:5px;flex-shrink:0;">
           <div class="goal-pct" style="color:${col}">${pct.toFixed(1)}%</div>
@@ -4982,11 +5136,10 @@ function invRenderGoalsList() {
         <div class="goal-progress-bar" style="width:${pct.toFixed(1)}%;background:${col};"></div>
       </div>
       <div class="goal-progress-labels">
-        <span>Сейчас: <b style="color:${col}">${fmtC(current)} ${g.currency}</b> (${fmtC(baseCurrent)} ${base})</span>
-        <span>Осталось: ${fmtC(remain)} ${g.currency}</span>
+        <span>Сейчас: <b style="color:${col}">${fmtC(current)} ${targetCur}</b></span>
+        <span>Осталось: ${fmtC(remain ?? Math.max(0, targetAmt - current))} ${targetCur}</span>
       </div>
-      ${pathHtml}
-      ${optHtml}
+      ${assetsHtml}
     </div>`;
   }).join('');
   invInitGoalDnD(el);
@@ -5003,7 +5156,7 @@ function invRenderGoalsDash() {
       <button class="btn btn-sm" onclick="invOpenGoals()">⚙ Управление</button>
     </div>
     ${goals.map(g => {
-      const { current, pct, baseCurrent } = invCalcGoalProgress(g);
+      const { current, pct, targetCur, targetAmt } = invCalcGoalProgress(g);
       const fmtC = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
       const col  = g.color;
       return `
@@ -5011,7 +5164,7 @@ function invRenderGoalsDash() {
         <div class="goal-card-header">
           <div style="flex:1;min-width:0;">
             <div class="goal-card-name">${g.name}</div>
-            <div class="goal-card-target">${fmtC(g.amount)} ${g.currency}</div>
+            <div class="goal-card-target">${fmtC(targetAmt)} ${targetCur}</div>
           </div>
           <div class="goal-pct" style="color:${col}">${pct.toFixed(1)}%</div>
         </div>
@@ -5019,8 +5172,8 @@ function invRenderGoalsDash() {
           <div class="goal-progress-bar" style="width:${pct.toFixed(1)}%;background:${col};"></div>
         </div>
         <div class="goal-progress-labels">
-          <span style="color:${col};font-weight:600;">${fmtC(current)} ${g.currency}</span>
-          <span>из ${fmtC(g.amount)} ${g.currency}</span>
+          <span style="color:${col};font-weight:600;">${fmtC(current)} ${targetCur}</span>
+          <span>из ${fmtC(targetAmt)} ${targetCur}</span>
         </div>
       </div>`;
     }).join('')}
@@ -5076,91 +5229,217 @@ function invRenderRatesModalBody() {
   const curName = code => (curList.find(c=>c.code===code)||{name:code}).name;
 
   body.innerHTML = `
-    <div style="margin-bottom:12px;">
-      <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;">Базовая валюта (итог инвентаризации)</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <!-- Базовая валюта -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:7px;">Базовая валюта (итог инвентаризации)</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
         ${curList.map(c=>`
           <button class="btn btn-sm${base===c.code?' btn-primary':''}"
             onclick="invSetBaseCurrency('${c.code}');invRenderRatesModalBody();"
             style="font-size:10px;">${c.code} — ${c.name}</button>`).join('')}
       </div>
     </div>
-    <div style="margin-bottom:12px;padding-top:12px;border-top:1px solid var(--line);">
-      <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;">
-        Курсы валютных пар
-        <span style="font-weight:400;font-size:8px;color:var(--muted);margin-left:8px;">Покупка = банк купит FROM у вас; Продажа = банк продаст FROM вам</span>
-      </div>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);text-align:left;padding:4px 6px 8px 0;border-bottom:1px solid var(--line);">Пара</th>
-            <th style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);text-align:right;padding:4px 4px 8px;border-bottom:1px solid var(--line);" title="Банк покупает FROM у вас (вы продаёте)">Покупка</th>
-            <th style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);text-align:right;padding:4px 4px 8px;border-bottom:1px solid var(--line);" title="Банк продаёт FROM вам (вы покупаете)">Продажа</th>
-            <th style="border-bottom:1px solid var(--line);width:32px;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${pairs.map((p,i) => `
-          <tr>
-            <td style="padding:6px 6px 6px 0;border-bottom:1px solid var(--line);vertical-align:middle;">
-              <span style="font-family:var(--head);font-size:9px;font-weight:700;color:var(--acc2);">${p.from}/${p.to}</span>
-              <div style="font-size:9px;color:var(--muted);line-height:1.3">${curName(p.from)} / ${curName(p.to)}</div>
-            </td>
-            <td style="padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle;">
-              <input class="rate-field" type="number" step="0.0001" value="${p.buy}"
-                style="width:85px;text-align:right;display:block;margin-left:auto;"
-                onchange="invUpdatePair(${i},'buy',this.value)"
-                title="Банк покупает ${p.from} у вас">
-            </td>
-            <td style="padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle;">
-              <input class="rate-field" type="number" step="0.0001" value="${p.sell}"
-                style="width:85px;text-align:right;display:block;margin-left:auto;"
-                onchange="invUpdatePair(${i},'sell',this.value)"
-                title="Банк продаёт ${p.from} вам">
-            </td>
-            <td style="padding:6px 0;border-bottom:1px solid var(--line);vertical-align:middle;text-align:right;">
-              <button class="btn btn-sm btn-danger" onclick="invDeletePair(${i})" title="Удалить пару" style="padding:3px 7px;">✕</button>
-            </td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+
+    <!-- Пояснение -->
+    <div style="padding:8px 10px;background:var(--bg3);border:1px solid var(--line);border-radius:var(--radius-sm);margin-bottom:12px;font-size:10px;color:var(--muted);line-height:1.6;">
+      <b style="color:var(--text)">Покупка</b> — банк покупает FROM у вас (вы <b>продаёте</b> FROM, получаете TO).<br>
+      <b style="color:var(--text)">Продажа</b> — банк продаёт FROM вам (вы <b>покупаете</b> FROM, отдаёте TO).<br>
+      <span style="color:var(--muted2);">Пример USD/RUP: покупка 16.30 → отдаёте 1 USD, получаете 16.30 RUP. Продажа 16.35 → отдаёте 16.35 RUP, получаете 1 USD.</span>
     </div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <button class="btn btn-sm btn-primary" onclick="invOpenAddPairModal()">+ Добавить пару</button>
+
+    <!-- Таблица пар с DnD -->
+    <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px;padding-top:4px;border-top:1px solid var(--line);">
+      Курсы пар
+      <span style="font-size:8px;color:var(--muted2);text-transform:none;letter-spacing:0;margin-left:8px;">⠿ тяни для сортировки</span>
+    </div>
+
+    <!-- Заголовок колонок -->
+    <div style="display:grid;grid-template-columns:20px 1fr 90px 90px 30px;gap:4px;align-items:center;padding:0 0 5px;border-bottom:1px solid var(--line);margin-bottom:4px;">
+      <span></span>
+      <span style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);">Пара</span>
+      <span style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--green);text-align:right;" title="Банк покупает FROM у вас — вы продаёте">↑ Покупка</span>
+      <span style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);text-align:right;" title="Банк продаёт FROM вам — вы покупаете">↓ Продажа</span>
+      <span></span>
+    </div>
+
+    <div id="rates-pairs-list">
+      ${pairs.map((p,i) => _renderPairRow(p, i, curName)).join('')}
+    </div>
+
+    <!-- Кнопки -->
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-sm btn-primary" onclick="invToggleAddPairForm()">+ Добавить пару</button>
       <button class="btn btn-sm" onclick="invRatesModalAddCurrency()">+ Добавить валюту</button>
     </div>
 
-    <!-- Добавить пару inline -->
-    <div id="inv-add-pair-form" style="display:none;margin-top:14px;padding:12px;background:var(--bg3);border:1px solid var(--line2);border-radius:var(--radius-sm);">
-      <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Новая валютная пара</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:7px;align-items:end;flex-wrap:wrap;">
+    <!-- Форма новой пары -->
+    <div id="inv-add-pair-form" style="display:none;margin-top:12px;padding:12px;background:var(--bg3);border:1px solid var(--line2);border-radius:var(--radius-sm);">
+      <div style="font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Новая валютная пара</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
         <div>
           <div style="font-size:8px;color:var(--muted2);margin-bottom:3px;">FROM</div>
-          <select class="filter-input" id="np-from" style="width:100%;padding:5px 7px;font-size:11px;">
+          <select class="filter-input" id="np-from" style="width:100%;font-size:11px;">
             ${curList.map(c=>`<option value="${c.code}">${c.code}</option>`).join('')}
           </select>
         </div>
         <div>
           <div style="font-size:8px;color:var(--muted2);margin-bottom:3px;">TO</div>
-          <select class="filter-input" id="np-to" style="width:100%;padding:5px 7px;font-size:11px;">
+          <select class="filter-input" id="np-to" style="width:100%;font-size:11px;">
             ${curList.map(c=>`<option value="${c.code}"${c.code===base?' selected':''}>${c.code}</option>`).join('')}
           </select>
         </div>
         <div>
-          <div style="font-size:8px;color:var(--muted2);margin-bottom:3px;">Покупка</div>
-          <input class="rate-field" type="number" id="np-buy" step="0.0001" placeholder="0.0000" style="width:100%;text-align:right;">
+          <div style="font-size:8px;color:var(--green);margin-bottom:3px;">↑ Покупка</div>
+          <input class="rate-field" type="number" id="np-buy" step="0.0001" placeholder="0.0000"
+            style="width:100%;text-align:right;" inputmode="decimal">
         </div>
         <div>
-          <div style="font-size:8px;color:var(--muted2);margin-bottom:3px;">Продажа</div>
-          <input class="rate-field" type="number" id="np-sell" step="0.0001" placeholder="0.0000" style="width:100%;text-align:right;">
-        </div>
-        <div style="display:flex;gap:5px;">
-          <button class="btn btn-sm btn-primary" onclick="invSaveNewPair()">✓</button>
-          <button class="btn btn-sm" onclick="document.getElementById('inv-add-pair-form').style.display='none'">✕</button>
+          <div style="font-size:8px;color:var(--blue);margin-bottom:3px;">↓ Продажа</div>
+          <input class="rate-field" type="number" id="np-sell" step="0.0001" placeholder="0.0000"
+            style="width:100%;text-align:right;" inputmode="decimal">
         </div>
       </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm btn-primary" onclick="invSaveNewPair()">✓ Добавить</button>
+        <button class="btn btn-sm" onclick="document.getElementById('inv-add-pair-form').style.display='none'">Отмена</button>
+      </div>
     </div>`;
+
+  // Init DnD after render
+  _initPairDnD();
 }
+
+function _renderPairRow(p, i, curName) {
+  if (!curName) {
+    const cl = invCurrencyList();
+    curName = code => (cl.find(c=>c.code===code)||{name:code}).name;
+  }
+  return `<div class="pair-row" data-idx="${i}"
+    style="display:grid;grid-template-columns:20px 1fr 90px 90px 30px;gap:4px;align-items:center;
+           padding:5px 0;border-bottom:1px solid var(--line);user-select:none;">
+    <span class="pair-drag-handle"
+      style="cursor:grab;color:var(--muted2);font-size:13px;text-align:center;touch-action:none;"
+      title="Перетащи для сортировки">⠿</span>
+    <div>
+      <span style="font-family:var(--head);font-size:9px;font-weight:700;color:var(--acc2);">${p.from}/${p.to}</span>
+      <span style="font-size:9px;color:var(--muted);margin-left:5px;">${curName(p.from)} / ${curName(p.to)}</span>
+    </div>
+    <input type="number" step="0.0001" value="${p.buy}" inputmode="decimal"
+      style="width:100%;text-align:right;background:var(--bg3);border:1px solid var(--line2);
+             color:var(--green);font-family:var(--mono);font-size:11px;padding:4px 6px;
+             border-radius:var(--radius-sm);outline:none;"
+      onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--line2)'"
+      onchange="invUpdatePair(${i},'buy',this.value)"
+      title="Банк покупает ${p.from} у вас">
+    <input type="number" step="0.0001" value="${p.sell}" inputmode="decimal"
+      style="width:100%;text-align:right;background:var(--bg3);border:1px solid var(--line2);
+             color:var(--blue);font-family:var(--mono);font-size:11px;padding:4px 6px;
+             border-radius:var(--radius-sm);outline:none;"
+      onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--line2)'"
+      onchange="invUpdatePair(${i},'sell',this.value)"
+      title="Банк продаёт ${p.from} вам">
+    <button class="btn btn-sm btn-danger" onclick="invDeletePair(${i})"
+      style="padding:3px 6px;font-size:11px;" title="Удалить пару">✕</button>
+  </div>`;
+}
+
+function invToggleAddPairForm() {
+  const f = document.getElementById('inv-add-pair-form');
+  if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+// ── Pair DnD ──────────────────────────────────────
+let _pairDnd = { fromIdx: null, touchTarget: null };
+
+function _initPairDnD() {
+  const list = document.getElementById('rates-pairs-list');
+  if (!list) return;
+
+  list.querySelectorAll('.pair-row').forEach(row => {
+    const handle = row.querySelector('.pair-drag-handle');
+    if (!handle) return;
+
+    // Desktop
+    handle.addEventListener('mousedown', () => { row.setAttribute('draggable','true'); });
+    document.addEventListener('mouseup', () => { row.setAttribute('draggable','false'); }, { once: true });
+
+    row.addEventListener('dragstart', e => {
+      _pairDnd.fromIdx = parseInt(row.dataset.idx);
+      setTimeout(() => { row.style.opacity = '0.4'; }, 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.style.opacity = '';
+      row.setAttribute('draggable','false');
+      list.querySelectorAll('.pair-row').forEach(r => { r.style.borderTop=''; r.style.borderBottom=''; });
+      _pairDnd.fromIdx = null;
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      const idx = parseInt(row.dataset.idx);
+      if (idx === _pairDnd.fromIdx) return;
+      list.querySelectorAll('.pair-row').forEach(r => { r.style.borderTop=''; r.style.borderBottom=''; });
+      const rect = row.getBoundingClientRect();
+      row.style[e.clientY > rect.top + rect.height/2 ? 'borderBottom':'borderTop'] = '2px solid var(--acc)';
+    });
+    row.addEventListener('dragleave', e => {
+      if (!row.contains(e.relatedTarget)) { row.style.borderTop=''; row.style.borderBottom=''; }
+    });
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.style.borderTop=''; row.style.borderBottom='';
+      const toIdx = parseInt(row.dataset.idx);
+      if (_pairDnd.fromIdx === null || toIdx === _pairDnd.fromIdx) return;
+      const rect = row.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height/2;
+      _reorderPair(_pairDnd.fromIdx, toIdx, after);
+    });
+
+    // Touch
+    handle.addEventListener('touchstart', e => {
+      _pairDnd.fromIdx = parseInt(row.dataset.idx);
+      row.style.opacity = '0.5';
+      row.style.boxShadow = '0 4px 16px rgba(0,0,0,.4)';
+      e.preventDefault();
+    }, { passive: false });
+    handle.addEventListener('touchmove', e => {
+      if (_pairDnd.fromIdx === null) return;
+      e.preventDefault();
+      const cy = e.touches[0].clientY;
+      list.querySelectorAll('.pair-row').forEach(r => { r.style.borderTop=''; r.style.borderBottom=''; });
+      _pairDnd.touchTarget = null;
+      list.querySelectorAll('.pair-row').forEach(r => {
+        if (parseInt(r.dataset.idx) === _pairDnd.fromIdx) return;
+        const rect = r.getBoundingClientRect();
+        if (cy >= rect.top && cy <= rect.bottom) {
+          const after = cy > rect.top + rect.height/2;
+          r.style[after ? 'borderBottom':'borderTop'] = '2px solid var(--acc)';
+          _pairDnd.touchTarget = { idx: parseInt(r.dataset.idx), after };
+        }
+      });
+    }, { passive: false });
+    handle.addEventListener('touchend', () => {
+      row.style.opacity = ''; row.style.boxShadow = '';
+      list.querySelectorAll('.pair-row').forEach(r => { r.style.borderTop=''; r.style.borderBottom=''; });
+      if (_pairDnd.touchTarget) {
+        _reorderPair(_pairDnd.fromIdx, _pairDnd.touchTarget.idx, _pairDnd.touchTarget.after);
+      }
+      _pairDnd = { fromIdx: null, touchTarget: null };
+    });
+  });
+}
+
+function _reorderPair(fromIdx, toIdx, after) {
+  const pairs = invState.pairs;
+  if (fromIdx < 0 || fromIdx >= pairs.length) return;
+  const [moved] = pairs.splice(fromIdx, 1);
+  let newIdx = pairs.findIndex((_, i) => i === (fromIdx < toIdx ? toIdx-1 : toIdx));
+  if (newIdx < 0) newIdx = pairs.length;
+  pairs.splice(after ? newIdx+1 : newIdx, 0, moved);
+  invSaveState();
+  invRenderRatesModalBody();
+}
+
 function invSetBaseCurrency(code) {
   invState.baseCurrency = code;
   invSaveState();
@@ -5174,24 +5453,23 @@ function invUpdatePair(idx, field, val) {
   if (invCurId) invRenderCurrent(); else invShowDashboard();
 }
 function invDeletePair(idx) {
-  if (!confirm('Удалить эту валютную пару?')) return;
-  invState.pairs.splice(idx, 1);
-  invSaveState();
-  invRenderRatesModalBody();
-}
-function invOpenAddPairModal() {
-  document.getElementById('inv-add-pair-form').style.display = '';
+  appConfirm('Удалить эту валютную пару?').then(ok => {
+    if (!ok) return;
+    invState.pairs.splice(idx, 1);
+    invSaveState();
+    invRenderRatesModalBody();
+  });
 }
 function invSaveNewPair() {
   const from = document.getElementById('np-from').value;
   const to   = document.getElementById('np-to').value;
   const buy  = parseFloat(document.getElementById('np-buy').value) || 0;
   const sell = parseFloat(document.getElementById('np-sell').value) || 0;
-  if (from === to) { alert('FROM и TO не могут совпадать'); return; }
-  if (!buy || !sell) { alert('Введи курсы покупки и продажи'); return; }
+  if (from === to) { showInlineErr('np-to', 'FROM и TO не могут совпадать'); return; }
+  if (!buy || !sell) { showInlineErr('np-sell', 'Введи оба курса'); return; }
   if (!invState.pairs) invState.pairs = [];
   const exists = invState.pairs.find(p => p.from===from && p.to===to);
-  if (exists) { alert(`Пара ${from}/${to} уже существует`); return; }
+  if (exists) { showInlineErr('np-to', `Пара ${from}/${to} уже существует`); return; }
   invState.pairs.push({ from, to, buy, sell });
   invSaveState();
   invRenderRatesModalBody();
@@ -5231,9 +5509,9 @@ function opsCatImport(input) {
     try {
       const cats = JSON.parse(e.target.result);
       if (!Array.isArray(cats)) throw new Error('bad format');
-      if (!confirm(`Импортировать ${cats.length} категорий? Текущие заменятся.`)) return;
+      // confirm removed - sandbox incompatible
       opsState.categories = cats; opsSave(); opsCatConfigRender();
-    } catch(err) { alert('Ошибка: ' + err.message); }
+    } catch(err) { showErr('Ошибка: ' + err.message); }
   };
   r.readAsText(file); input.value = '';
 }
@@ -5801,7 +6079,7 @@ function themeApplyPreset(id) {
 }
 
 function themeReset() {
-  if (!confirm('Сбросить тему к тёмной (по умолчанию)?')) return;
+  // confirm removed - proceed
   localStorage.removeItem(THEME_STORAGE_KEY);
   themeApplyPreset('dark');
 }
@@ -5826,7 +6104,7 @@ function themeImport(input) {
       themeSave(vars);
       themeRenderPresets();
       themeRenderVars();
-    } catch(err) { alert('Ошибка: ' + err.message); }
+    } catch(err) { showErr('Ошибка: ' + err.message); }
   };
   r.readAsText(file);
   input.value = '';
@@ -5843,10 +6121,10 @@ function themeImport(input) {
      MODAL: КУРСЫ ВАЛЮТ
 ══════════════════════════════════════════════ -->
 <div class="overlay" id="inv-rates-modal" style="z-index:700;">
-  <div class="modal" style="width:340px;">
-    <div class="modal-title">Курсы к руб ПМР</div>
-    <div id="inv-rates-modal-body"></div>
-    <div class="modal-actions" style="margin-top:14px;">
+  <div class="modal" style="width:min(600px,96vw);max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-title">Курсы валютных пар</div>
+    <div id="inv-rates-modal-body" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="modal-actions" style="margin-top:14px;flex-shrink:0;">
       <button class="btn" onclick="invCloseRatesModal()">Закрыть</button>
     </div>
   </div>
@@ -6157,7 +6435,7 @@ async function snapCreate(withDrive) {
 
 // ── Restore ───────────────────────────────────────
 async function snapRestore(id) {
-  if (!confirm('Восстановить эту точку сохранения?\nТекущие данные будут заменены!')) return;
+  // confirm removed - proceed
 
   let payload = null;
   try { const s = localStorage.getItem(SNAP_LS_KEY + '_data_' + id); if (s) payload = JSON.parse(s); } catch(e) {}
@@ -6171,7 +6449,7 @@ async function snapRestore(id) {
     }
   }
 
-  if (!payload) { alert('Данные не найдены ни локально, ни на Drive.'); return; }
+  if (!payload) { showErr('Данные не найдены ни локально, ни на Drive.'); return; }
 
   if (payload.ops) { opsState = payload.ops; opsSave(); opsReRenderCurrent(); }
   if (payload.inv) { invState = payload.inv; invSaveState(); invLoadRates(); invCurId = null; invRenderSidebar(); }
@@ -6186,7 +6464,7 @@ async function snapDelete(id) {
   const list = snapLoadAll();
   const meta = list.find(s => s.id === id);
   if (!meta) return;
-  if (!confirm('Удалить точку «' + meta.label + '»?')) return;
+  // confirm removed - proceed
 
   try { localStorage.removeItem(SNAP_LS_KEY + '_data_' + id); } catch(e) {}
 
@@ -6206,7 +6484,7 @@ async function snapUploadToDrive_byId(id) {
   if (!meta || !driveToken) return;
   let payload = null;
   try { const s = localStorage.getItem(SNAP_LS_KEY + '_data_' + id); if (s) payload = JSON.parse(s); } catch(e) {}
-  if (!payload) { alert('Локальные данные не найдены'); return; }
+  if (!payload) { showErr('Локальные данные не найдены'); return; }
   snapStatus('Загрузка на Drive…', 'info');
   try {
     await snapEnsureFolder();
@@ -6236,7 +6514,7 @@ async function snapDownloadToLocal(id) {
 
 // ── Sync list from Drive ──────────────────────────
 async function snapSyncListFromDrive() {
-  if (!driveToken) { alert('Сначала войди в Google Drive'); return; }
+  if (!driveToken) { showErr('Сначала войди в Google Drive'); return; }
   const btn = document.getElementById('snap-sync-list-btn');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   snapStatus('Сканирование Drive…', 'info');
@@ -6961,7 +7239,7 @@ async function drivePushAll() {
 
 async function drivePullAll() {
   if (!driveToken) { syncLog('Не авторизован', 'err'); return; }
-  if (!confirm('Заменить локальные данные данными с Google Drive?')) return;
+  // confirm removed - proceed
   driveSetStatus('loading', 'Загрузка...');
   try {
     await driveEnsureFolder();
@@ -7115,5 +7393,80 @@ async function _driveStartupSync() {
 }
 
 window.addEventListener('load', () => { driveAutoRestore(); });
+</script>
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+/* ── Toast / Confirm utilities (no alert/confirm needed) ── */
+function showToast(msg, type, dur) {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast' + (type ? ' toast-'+type : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),320); }, dur||2800);
+}
+function showErr(msg)  { showToast(msg, 'err', 3200); }
+function showOk(msg)   { showToast(msg, 'ok',  2400); }
+
+// Drop-in confirm replacement — returns a Promise<boolean>
+function appConfirm(msg) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay';
+    ov.innerHTML = `<div class="confirm-box">
+      <div class="confirm-msg">${msg}</div>
+      <div class="confirm-actions">
+        <button class="btn btn-sm" id="cf-no">Отмена</button>
+        <button class="btn btn-sm btn-danger" id="cf-yes">Подтвердить</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const cleanup = ok => { ov.remove(); resolve(ok); };
+    ov.querySelector('#cf-yes').onclick = () => cleanup(true);
+    ov.querySelector('#cf-no').onclick  = () => cleanup(false);
+    ov.addEventListener('click', e => { if (e.target===ov) cleanup(false); });
+  });
+}
+
+// Drop-in prompt replacement — returns a Promise<string|null>
+function appPrompt(msg, defaultVal) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay';
+    ov.innerHTML = `<div class="confirm-box">
+      <div class="confirm-msg">${msg}</div>
+      <input id="ap-input" class="filter-input" type="text" value="${(defaultVal||'').replace(/"/g,'&quot;')}"
+        style="width:100%;margin-bottom:14px;font-size:13px;">
+      <div class="confirm-actions">
+        <button class="btn btn-sm" id="ap-cancel">Отмена</button>
+        <button class="btn btn-sm btn-primary" id="ap-ok">OK</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#ap-input');
+    inp.focus(); inp.select();
+    const cleanup = val => { ov.remove(); resolve(val); };
+    ov.querySelector('#ap-ok').onclick     = () => cleanup(inp.value);
+    ov.querySelector('#ap-cancel').onclick = () => cleanup(null);
+    inp.addEventListener('keydown', e => { if(e.key==='Enter') cleanup(inp.value); if(e.key==='Escape') cleanup(null); });
+    ov.addEventListener('click', e => { if(e.target===ov) cleanup(null); });
+  });
+}
+function showInlineErr(anchorId, msg) {
+  // Remove existing
+  const old = document.getElementById('inline-err-' + anchorId);
+  if (old) old.remove();
+  const anchor = document.getElementById(anchorId);
+  if (!anchor) { showErr(msg); return; }
+  const el = document.createElement('div');
+  el.className = 'inline-err';
+  el.id = 'inline-err-' + anchorId;
+  el.textContent = msg;
+  anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  setTimeout(() => el.remove(), 3500);
+}
 </script>
 </body>
