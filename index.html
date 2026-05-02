@@ -14,39 +14,39 @@
    DESIGN TOKENS
 ══════════════════════════════════════════════════ */
 :root {
-  --bg:    #0f0f10;
-  --bg2:   #18181c;
-  --bg3:   #22222a;
-  --bg4:   #2a2a35;
-  --line:  #2e2e38;
-  --line2: #3a3a48;
+  --bg:    #0c0c0f;
+  --bg2:   #14141a;
+  --bg3:   #1c1c25;
+  --bg4:   #242430;
+  --line:  #26263a;
+  --line2: #333348;
 
   --acc:   #7c6af7;
   --acc2:  #a390ff;
-  --acc-glow: rgba(124,106,247,.08);
+  --acc-glow: rgba(124,106,247,.07);
 
   --green: #3ecf8e;
   --red:   #f87171;
   --amber: #fbbf24;
   --blue:  #60a5fa;
 
-  --green-bg: #0d2e1e;
-  --red-bg:   #2e0d0d;
-  --amber-bg: #1e1e0d;
-  --blue-bg:  #0d1e2e;
+  --green-bg: #0a2619;
+  --red-bg:   #280b0b;
+  --amber-bg: #1a1a08;
+  --blue-bg:  #0a1826;
 
-  --text:   #e8e8f0;
-  --muted:  #7b7b90;
-  --muted2: #555568;
+  --text:   #e4e4ef;
+  --muted:  #72728a;
+  --muted2: #4a4a60;
 
   --mono: 'JetBrains Mono', monospace;
   --head: 'Unbounded', sans-serif;
 
-  --sidebar-w: 216px;
-  --topbar-h: 44px;
-  --bottom-nav-h: 56px;
-  --radius: 7px;
-  --radius-sm: 4px;
+  --sidebar-w: 220px;
+  --topbar-h: 46px;
+  --bottom-nav-h: 60px;
+  --radius: 8px;
+  --radius-sm: 5px;
 }
 
 /* ══════════════════════════════════════════════════
@@ -63,6 +63,22 @@ body {
   padding-top: var(--topbar-h);
   overflow: hidden;
 }
+/* subtle texture */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 256px;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: .025;
+  mix-blend-mode: overlay;
+}
+
+/* Quick input floating elements — hidden by default (desktop), shown only on mobile */
+.quick-input-bar { display: none; }
+.quick-input-toggle { display: none; }
 
 /* ══════════════════════════════════════════════════
    CUSTOM SCROLLBAR
@@ -86,11 +102,13 @@ body {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--topbar-h);
-  background: var(--bg2);
+  background: rgba(20,20,26,.92);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   z-index: 400;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .topbar-brand {
   display: flex;
@@ -161,8 +179,15 @@ body {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* no outer scroll */
+  position: relative;
+}
+/* nav section scrolls internally */
+.sidebar-nav-scroll {
   overflow-y: auto;
   overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .sidebar-logo {
@@ -230,7 +255,7 @@ body {
 
 .sidebar-footer {
   border-top: 1px solid var(--line);
-  padding: 12px;
+  padding: 14px 12px 18px;
   flex-shrink: 0;
 }
 
@@ -267,11 +292,12 @@ body {
   font-family: var(--mono);
   font-size: 11px;
   cursor: pointer;
-  transition: color .12s, background .12s, border-color .12s;
+  transition: color .12s, background .12s, border-color .12s, box-shadow .12s;
   white-space: nowrap;
   text-align: center;
 }
 .btn:hover { background: var(--bg3); color: var(--text); border-color: var(--acc); }
+.btn:active { transform: scale(.98); }
 
 .btn-primary {
   background: var(--acc);
@@ -279,7 +305,12 @@ body {
   border-color: var(--acc);
   font-weight: 600;
 }
-.btn-primary:hover { background: var(--acc2); border-color: var(--acc2); color: #fff; }
+.btn-primary:hover {
+  background: var(--acc2);
+  border-color: var(--acc2);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(124,106,247,.35);
+}
 
 .btn-danger {
   border-color: #7f2020;
@@ -306,7 +337,9 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px 16px;
+  transition: border-color .15s;
 }
+.stat-card:hover { border-color: var(--line2); }
 .stat-card-label {
   font-size: 8.5px;
   letter-spacing: .12em;
@@ -1225,10 +1258,12 @@ select.filter-input option { background: var(--bg2); }
   position: fixed;
   bottom: 0; left: 0; right: 0;
   height: var(--bottom-nav-h);
-  background: var(--bg2);
+  background: rgba(20,20,26,.95);
   border-top: 1px solid var(--line);
   z-index: 450;
   align-items: stretch;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .mobile-nav-item {
   flex: 1;
@@ -1459,16 +1494,17 @@ select.filter-input option { background: var(--bg2); }
     transform: translateX(-100%);
     transition: transform .25s cubic-bezier(.4,0,.2,1);
     border-right: 1px solid var(--line2);
-    box-shadow: 4px 0 32px rgba(0,0,0,.5);
+    box-shadow: 4px 0 32px rgba(0,0,0,.6);
   }
   .sidebar.is-open { transform: translateX(0); }
 
-  /* Main area fills full width */
+  /* Main area fills full width, important: padding-bottom so FAB/nav never hides last row */
   .main-area {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     width: 100%;
+    padding-bottom: 80px;
   }
 
   /* Inv app: full width layout */
@@ -1476,29 +1512,254 @@ select.filter-input option { background: var(--bg2); }
     display: flex;
     flex-direction: column;
   }
-  #inv-main-area { flex: 1; overflow-y: auto; }
+  #inv-main-area {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px;
+  }
 
   /* Pages: tighter padding */
-  .page { padding: 16px 14px; }
-  .dash-wrap { padding: 16px 14px; }
+  .page { padding: 14px 12px; }
+  .dash-wrap { padding: 14px 12px; }
 
   /* Stat grids: 2 cols on mobile */
   .stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
   .stat-grid-3 { grid-template-columns: repeat(2, 1fr); }
-  .stat-card-value { font-size: 15px; }
+  .stat-card-value { font-size: 14px; }
+  .stat-card { padding: 12px 14px; }
 
-  /* Tables: horizontal scroll */
-  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 520px; }
-  thead th, tbody td { padding: 7px 10px; }
+  /* ─── TABLE → CARD transformation ───────────────
+     Simple block layout: no grid, no absolute positioning.
+     Each row = padded block card.
+  ──────────────────────────────────────────────── */
+  .tbl-wrap { overflow-x: visible; border-radius: var(--radius); }
+  .tbl-wrap table { min-width: unset; width: 100%; }
 
-  /* Page 4 (current month) table — many columns */
+  /* Hide column headers on mobile */
+  .tbl-wrap table thead { display: none; }
+
+  /* tbody: normal block */
+  .tbl-wrap table tbody { display: block; }
+
+  /* Each row: card style */
+  .tbl-wrap table tbody tr {
+    display: block;
+    padding: 10px 50px 10px 14px; /* right padding leaves room for edit button */
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    overflow: visible;
+  }
+  .tbl-wrap table tbody tr:last-child { border-bottom: none; }
+  .tbl-wrap table tbody tr:hover { background: var(--bg3); }
+
+  /* All cells: block, reset table spacing */
+  .tbl-wrap table tbody td {
+    display: block;
+    padding: 0 0 2px 0;
+    border: none;
+    font-size: 12px;
+    line-height: 1.5;
+    vertical-align: unset;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  /* Date cell: small muted */
+  .tbl-wrap table tbody td:first-child {
+    font-size: 10px;
+    color: var(--muted);
+    padding-bottom: 3px;
+  }
+
+  /* Tags/type cell: normal flow */
+  .tbl-wrap table tbody td:nth-child(2) {
+    padding-bottom: 4px;
+  }
+
+  /* Amount cell: preserve color from amt-pos/amt-neg classes */
+  .tbl-wrap table tbody td:nth-child(3) {
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    padding-bottom: 2px;
+    /* color inherited from .amt-pos / .amt-neg on the cell */
+  }
+  /* Ensure color classes aren't overridden */
+  .tbl-wrap table tbody td.amt-pos { color: var(--green) !important; }
+  .tbl-wrap table tbody td.amt-neg { color: var(--red) !important; }
+
+  /* Comment cells */
+  .tbl-wrap table tbody td:nth-child(4),
+  .tbl-wrap table tbody td:nth-child(5) {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Action/edit button cell */
+  .tbl-wrap table tbody td:last-child {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+  }
+
+  /* Expand button: larger tap target on mobile */
+  .txn-expand-btn {
+    padding: 5px 10px;
+    font-size: 13px;
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Edit button: larger tap target on mobile */
+  .row-edit-btn {
+    padding: 6px 10px;
+    font-size: 14px;
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  /* Subtotal rows: just show as a footer line */
+  .tbl-wrap table tbody tr.month-subtotal-row {
+    padding: 4px 14px;
+    background: var(--bg3);
+  }
+  .tbl-wrap table tbody tr.month-subtotal-row td {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 0;
+  }
+
+  /* Expand detail rows */
+  .tbl-wrap table tbody tr.txn-items-row {
+    padding: 0;
+    background: var(--bg3);
+  }
+  .tbl-wrap table tbody tr.txn-items-row td {
+    display: block;
+    padding: 0;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  /* p2, p5: running total column hidden */
+  #p2body tr:not(.month-subtotal-row) td:nth-child(4),
+  #p5body tr:not(.month-subtotal-row) td:nth-child(4) { display: none; }
+
+  /* p4: hide extra columns */
   #p4body tr td:nth-child(5),
   #p4body tr td:nth-child(6),
-  #p4body tr td:nth-child(7),
-  #op-p4 thead th:nth-child(5),
-  #op-p4 thead th:nth-child(6),
-  #op-p4 thead th:nth-child(7) { display: none; }
+  #p4body tr td:nth-child(7) { display: none; }
+
+  /* history table (inv dashboard) */
+  .history-table thead { display: none; }
+  .history-table tbody tr {
+    display: block;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-table tbody td {
+    display: block;
+    padding: 1px 0;
+    border: none;
+  }
+
+  /* ─── Quick input bar (mobile only) ─────────────
+     Floating bar, toggled by button left of FAB
+  ──────────────────────────────────────────────── */
+  .quick-input-bar {
+    display: flex;
+    position: fixed;
+    bottom: calc(var(--bottom-nav-h) + 78px);
+    left: 12px;
+    right: 12px;
+    gap: 5px;
+    z-index: 290;
+    background: var(--bg2);
+    border: 1px solid var(--line2);
+    border-radius: 24px;
+    padding: 8px 8px 8px 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.55);
+    align-items: center;
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    transition: opacity .18s, transform .18s;
+  }
+  .quick-input-bar.is-visible {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .quick-input-bar .qi-field {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 0;
+    min-width: 0;
+  }
+  .quick-input-bar .qi-field::placeholder { color: var(--muted2); }
+  .quick-input-bar .qi-hint {
+    font-size: 9px;
+    color: var(--muted2);
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .quick-input-bar .qi-submit {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--acc);
+    border: none;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .12s;
+  }
+  .quick-input-bar .qi-submit:hover { background: var(--acc2); }
+
+  /* Quick input toggle button (sits left of FAB) */
+  .quick-input-toggle {
+    position: fixed;
+    bottom: calc(var(--bottom-nav-h) + 14px);
+    right: 76px;
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1px solid var(--line2);
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300;
+    transition: color .15s, border-color .15s, background .15s;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 2px 10px rgba(0,0,0,.3);
+  }
+  .quick-input-toggle.is-active {
+    background: var(--acc-glow);
+    border-color: var(--acc);
+    color: var(--acc2);
+  }
+
+  /* Sidebar footer extra bottom padding on mobile (above bottom nav) */
+  .sidebar-footer { padding-bottom: 20px; }
+  /* Inv sidebar footer inline-padded, override for mobile */
+  #app-inv .sidebar > div:last-child { padding-bottom: 20px; }
+
+  /* Hide desktop quick input in sidebar on mobile — has floating bar instead */
+  .sidebar-quick-input { display: none; }
 
   /* Charts: smaller height */
   .chart-canvas-wrap { height: 150px; }
@@ -1536,9 +1797,7 @@ select.filter-input option { background: var(--bg2); }
     border-radius: 14px 14px 0 0;
     overflow-y: auto;
   }
-  .overlay.is-open {
-    align-items: flex-end;
-  }
+  .overlay.is-open { align-items: flex-end; }
   .drive-modal { width: 100%; }
 
   /* Form rows: single column */
@@ -1561,45 +1820,52 @@ select.filter-input option { background: var(--bg2); }
   /* Add operation FAB replacement — primary btn in bottom bar */
   .mobile-fab {
     position: fixed;
-    bottom: calc(var(--bottom-nav-h) + 12px);
+    bottom: calc(var(--bottom-nav-h) + 14px);
     right: 16px;
-    width: 48px;
-    height: 48px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
     background: var(--acc);
     border: none;
     color: #fff;
-    font-size: 22px;
+    font-size: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 20px var(--acc);
+    box-shadow: 0 4px 24px rgba(124,106,247,.5);
     z-index: 300;
     transition: transform .15s, box-shadow .15s;
     -webkit-tap-highlight-color: transparent;
   }
-  .mobile-fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--acc2); }
-  .mobile-fab:active { transform: scale(.95); }
+  .mobile-fab:hover { transform: scale(1.08); box-shadow: 0 6px 32px rgba(163,144,255,.6); }
+  .mobile-fab:active { transform: scale(.94); }
 
-  /* FAB shows only when ops app is active — JS controls this via style.display */
-  /* Default inside mobile breakpoint: visible (JS hides it for inv) */
+  /* FAB shows only when ops app is active */
   #app-ops.is-active ~ .mobile-fab { display: flex; }
 
   /* Nom row touch-friendly */
-  .nom-row { min-height: 42px; }
-  .qty-btn { width: 36px; height: 42px; font-size: 18px; }
+  .nom-row { min-height: 44px; }
+  .qty-btn { width: 38px; height: 44px; font-size: 18px; }
   .qty-input { font-size: 14px; width: 44px; }
+
+  /* Categories page: stack chart and legend */
+  #op-p6 [style*="grid-template-columns:1fr 1fr"] {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  #p6-legend { max-height: 200px; }
 }
 
 @media (max-width: 400px) {
   .inv-totals-bar { grid-template-columns: 1fr; gap: 0; }
   .stat-grid-4 { grid-template-columns: 1fr 1fr; gap: 7px; }
-  .page { padding: 12px 10px; }
-  .dash-wrap { padding: 12px 10px; }
+  .page { padding: 10px 10px; }
+  .dash-wrap { padding: 10px 10px; }
   .filters { flex-direction: column; align-items: stretch; }
   .filter-input { width: 100%; }
   .filter-reset { width: 100%; text-align: center; }
+  .tbl-wrap table tbody td:nth-child(4) { max-width: 160px; }
 }
 
 /* Tablet: keep sidebar but slightly narrower */
@@ -1704,6 +1970,17 @@ select.filter-input option { background: var(--bg2); }
 <button class="mobile-fab" id="mobile-fab" onclick="opsOpenAddModal()" title="Добавить операцию">+</button>
 
 <!-- ══════════════════════════════════════════════
+     MOBILE: QUICK INPUT TOGGLE + BAR
+══════════════════════════════════════════════ -->
+<button class="quick-input-toggle" id="qi-toggle-btn" onclick="qiToggle()" title="Быстрый ввод">⌨</button>
+<div class="quick-input-bar" id="qi-bar">
+  <input class="qi-field" id="qi-mobile-input"
+    placeholder="+/-сумма нал/безнал коммент"
+    onkeydown="if(event.key==='Enter'){qiMobileSubmit();} if(event.key==='Escape'){qiClose();}">
+  <button class="qi-submit" onclick="qiMobileSubmit()">↵</button>
+</div>
+
+<!-- ══════════════════════════════════════════════
      APP: ФИНУЧЁТ
 ══════════════════════════════════════════════ -->
 <div class="app-frame is-active" id="app-ops">
@@ -1714,6 +1991,7 @@ select.filter-input option { background: var(--bg2); }
       <div class="sidebar-logo-sub">учёт операций</div>
     </div>
 
+    <div class="sidebar-nav-scroll">
     <div class="sidebar-section-label">Разделы</div>
     <div class="sidebar-nav-item is-active" onclick="opsNav('op-p1');closeSidebar()">
       <div class="sidebar-nav-dot"></div>
@@ -1739,11 +2017,10 @@ select.filter-input option { background: var(--bg2); }
       <div class="sidebar-nav-dot"></div>
       <div>Категории</div>
     </div>
+    </div><!-- /sidebar-nav-scroll -->
 
-    <div class="sidebar-gap"></div>
-
-    <!-- Быстрый ввод -->
-    <div style="padding:8px 12px;border-top:1px solid var(--line);flex-shrink:0;">
+    <!-- Быстрый ввод (только desktop — на мобильном есть плавающая панель) -->
+    <div class="sidebar-quick-input" style="padding:8px 12px;border-top:1px solid var(--line);flex-shrink:0;">
       <div style="font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:5px;">Быстрый ввод</div>
       <div style="display:flex;gap:5px;align-items:center;">
         <input id="quick-input" class="filter-input" style="flex:1;min-width:0;font-size:11px;"
@@ -1756,13 +2033,15 @@ select.filter-input option { background: var(--bg2); }
 
     <div class="sidebar-footer" style="display:flex;flex-direction:column;gap:6px;">
       <button class="btn btn-primary btn-full" onclick="opsOpenAddModal();closeSidebar()">+ Операция</button>
-      <button class="btn btn-full btn-sm btn-sync" id="ops-sync-btn" onclick="driveSyncApp('ops');closeSidebar()">⟳ Sync Drive</button>
-      <button class="btn btn-full btn-sm" onclick="snapOpenModal();closeSidebar()">◈ Архив</button>
-      <button class="btn btn-full btn-sm" onclick="opsExportJSON();closeSidebar()">↓ JSON</button>
-      <button class="btn btn-full btn-sm" onclick="opsExportXLSX();closeSidebar()">↓ Excel</button>
-      <label class="btn btn-full btn-sm" style="cursor:pointer;" onclick="closeSidebar()">↑ Импорт
-        <input type="file" accept=".json,.xlsx,.xls" style="display:none" onchange="opsImportFile(this)">
-      </label>
+      <button class="btn btn-full btn-sm btn-sync" id="ops-sync-btn" onclick="driveSyncApp('ops');closeSidebar()">⟳ Синхронизировать</button>
+      <div style="height:1px;background:var(--line);margin:2px 0;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button class="btn btn-sm" onclick="opsOpenExportModal();closeSidebar()">↓ Экспорт</button>
+        <label class="btn btn-sm" style="cursor:pointer;" onclick="closeSidebar()">↑ Импорт
+          <input type="file" accept=".json,.xlsx,.xls" style="display:none" onchange="opsImportFile(this)">
+        </label>
+      </div>
+      <button class="btn btn-full btn-sm" onclick="snapOpenModal();closeSidebar()">◈ Архив снапшотов</button>
     </div>
   </aside>
 
@@ -1941,30 +2220,32 @@ select.filter-input option { background: var(--bg2); }
     <div id="inv-date-list" style="overflow-y:auto;flex:1;min-height:0;"></div>
 
     <!-- Зафиксированные кнопки снизу -->
-    <div style="border-top:1px solid var(--line);flex-shrink:0;">
-      <div class="sidebar-btn-group">
-        <button class="btn btn-primary btn-full btn-sm" onclick="invOpenNewModal();closeSidebar()">+ Новая дата</button>
+    <div style="border-top:1px solid var(--line);flex-shrink:0;padding:14px 12px 18px;display:flex;flex-direction:column;gap:6px;">
+
+      <!-- Primary action -->
+      <button class="btn btn-primary btn-full btn-sm" onclick="invOpenNewModal();closeSidebar()">+ Новая дата</button>
+
+      <!-- Sync -->
+      <button class="btn btn-sm btn-sync btn-full" id="inv-sync-btn" onclick="driveSyncApp('inv');closeSidebar()">⟳ Синхронизировать</button>
+
+      <!-- Section: настройки -->
+      <div style="height:1px;background:var(--line);margin:2px 0;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button class="btn btn-sm" onclick="invOpenConfig();closeSidebar()">⚙ Блоки</button>
+        <button class="btn btn-sm" onclick="invOpenRatesModal();closeSidebar()" title="Курсы валют">₽ Курсы</button>
+        <button class="btn btn-sm" onclick="invOpenDiff();closeSidebar()">⇄ Сравнить</button>
+        <button class="btn btn-sm" onclick="invOpenGoals();closeSidebar()">◎ Цели</button>
       </div>
-      <div class="sidebar-btn-group" style="padding-top:0;">
-        <button class="btn btn-sm btn-sync btn-full" id="inv-sync-btn" onclick="driveSyncApp('inv');closeSidebar()">⟳ Sync Drive</button>
-      </div>
-      <div class="sidebar-btn-group" style="padding-top:0;gap:4px;">
-        <button class="btn btn-sm" style="flex:1;" onclick="invExport();closeSidebar()">↓ Экспорт</button>
-        <label class="btn btn-sm" style="flex:1;cursor:pointer;" onclick="closeSidebar()">↑ Импорт
+
+      <!-- Section: данные -->
+      <div style="height:1px;background:var(--line);margin:2px 0;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button class="btn btn-sm" onclick="invExport();closeSidebar()">↓ Экспорт</button>
+        <label class="btn btn-sm" style="cursor:pointer;" onclick="closeSidebar()">↑ Импорт
           <input type="file" accept=".json" style="display:none" onchange="invImport(this)">
         </label>
-        <button class="btn btn-sm" style="flex:0 0 auto;padding:5px 8px;" onclick="invOpenRatesModal();closeSidebar()" title="Курсы валют">₽</button>
       </div>
-      <div class="sidebar-btn-group" style="padding-top:0;gap:4px;">
-        <button class="btn btn-sm" style="flex:1;" onclick="invOpenConfig();closeSidebar()">⚙ Блоки</button>
-        <button class="btn btn-sm" style="flex:1;" onclick="invOpenDiff();closeSidebar()">⇄ Сравнить</button>
-      </div>
-      <div class="sidebar-btn-group" style="padding-top:0;">
-        <button class="btn btn-sm btn-full" onclick="snapOpenModal();closeSidebar()">◈ Архив</button>
-      </div>
-      <div class="sidebar-btn-group" style="padding-top:0;">
-        <button class="btn btn-sm btn-full" onclick="invOpenGoals();closeSidebar()">◎ Цели</button>
-      </div>
+      <button class="btn btn-sm btn-full" onclick="snapOpenModal();closeSidebar()">◈ Архив снапшотов</button>
     </div>
   </aside>
 
@@ -2066,6 +2347,28 @@ select.filter-input option { background: var(--bg2); }
       <button class="btn btn-danger modal-actions-left" id="m-del-btn" style="display:none" onclick="opsDeleteOp()">Удалить</button>
       <button class="btn" onclick="opsCloseModal()">Отмена</button>
       <button class="btn btn-primary" onclick="opsSaveOp()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MODAL: OPS — ЭКСПОРТ
+══════════════════════════════════════════════ -->
+<div class="overlay" id="ops-export-modal">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-title">Экспорт данных</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+      <button class="btn btn-full" style="padding:13px 16px;text-align:left;flex-direction:column;align-items:flex-start;gap:4px;height:auto;" onclick="opsExportJSON();opsCloseExportModal()">
+        <span style="font-size:12px;color:var(--text);font-weight:500;">JSON</span>
+        <span style="font-size:9px;color:var(--muted);white-space:normal;line-height:1.4;">Полный экспорт со всеми данными — для резервной копии и импорта</span>
+      </button>
+      <button class="btn btn-full" style="padding:13px 16px;text-align:left;flex-direction:column;align-items:flex-start;gap:4px;height:auto;" onclick="opsExportXLSX();opsCloseExportModal()">
+        <span style="font-size:12px;color:var(--text);font-weight:500;">Excel (.xlsx)</span>
+        <span style="font-size:9px;color:var(--muted);white-space:normal;line-height:1.4;">Таблица операций — для анализа в Excel или Google Sheets</span>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="opsCloseExportModal()">Отмена</button>
     </div>
   </div>
 </div>
@@ -2499,7 +2802,7 @@ function renderP1() {
   const hasCat = txns.some(t => !!t.cat);
 
   const byMonth = {};
-  const sorted = [...txns].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  const sorted = [...txns].sort((a,b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
   for (const t of sorted) { const m = t.date.slice(0,7); if (!byMonth[m]) byMonth[m] = []; byMonth[m].push(t); }
 
   let rows = '';
@@ -2513,7 +2816,7 @@ function renderP1() {
         : '';
       const hasItems = t.items && t.items.length > 0;
       const expandBtn = hasItems
-        ? `<button class="txn-expand-btn" onclick="opsToggleItems(${t.id})" title="Показать позиции">▸ ${t.items.length}</button>`
+        ? `<button class="txn-expand-btn" onclick="opsToggleItems('${t.id}')" title="Показать позиции">▸ ${t.items.length}</button>`
         : '';
       return `<tr data-txnid="${t.id}">
       <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
@@ -2631,7 +2934,7 @@ function renderP2() {
 
   document.getElementById('p2count').textContent = `${txns.length} операций`;
 
-  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || a.id-b.id);
+  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
   let run = 0;
   const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
 
@@ -2671,7 +2974,7 @@ function renderP5() {
 
   document.getElementById('p5count').textContent = `${txns.length} операций`;
 
-  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || a.id-b.id);
+  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
   let run = 0;
   const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
 
@@ -2782,7 +3085,7 @@ function renderP4() {
 
   document.getElementById('p4count').textContent = `${txns.length} операций за ${label}`;
 
-  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || a.id-b.id);
+  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
   let cashRun=0, cardRun=0;
   const withRun = sorted.map(t => {
     if (t.way==='Наличный') cashRun+=t.amount; else cardRun+=t.amount;
@@ -3027,6 +3330,8 @@ function opsToggleItems(id) {
 
   mainRow.insertAdjacentElement('afterend', detailTr);
 }
+function opsOpenExportModal() { document.getElementById('ops-export-modal').classList.add('is-open'); }
+function opsCloseExportModal() { document.getElementById('ops-export-modal').classList.remove('is-open'); }
 function opsExportJSON() {
   const blob = new Blob([JSON.stringify(opsState, null, 2)], { type:'application/json' });
   const a = document.createElement('a');
@@ -3035,7 +3340,7 @@ function opsExportJSON() {
   a.click();
 }
 function opsExportXLSX() {
-  const sorted = [...opsState.txns].sort((a,b) => a.date.localeCompare(b.date) || a.id-b.id);
+  const sorted = [...opsState.txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
   const rows   = sorted.map(t => [fmtDateFull(t.date), t.type==='income'?'Приход':'Расход', t.way, t.amount, t.comment||'']);
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:28},{wch:10},{wch:14},{wch:12},{wch:60}];
@@ -5579,6 +5884,32 @@ quickInputSubmit = function() {
   showHint(`✓ ${type==='income'?'+':'−'}${amount} · ${way==='Наличный'?'нал':'безнал'}${catName?' · '+catName:''}${comment?' · '+comment:''}`, 'var(--green)');
   inp.value = '';
 };
+
+// ── Mobile quick input ────────────────────────────
+function qiToggle() {
+  const bar = document.getElementById('qi-bar');
+  const btn = document.getElementById('qi-toggle-btn');
+  const inp = document.getElementById('qi-mobile-input');
+  const isOpen = bar.classList.toggle('is-visible');
+  btn.classList.toggle('is-active', isOpen);
+  if (isOpen) { setTimeout(() => inp.focus(), 60); }
+}
+function qiClose() {
+  document.getElementById('qi-bar').classList.remove('is-visible');
+  document.getElementById('qi-toggle-btn').classList.remove('is-active');
+}
+function qiMobileSubmit() {
+  const mobileInp = document.getElementById('qi-mobile-input');
+  // Temporarily point quick-input to mobile input value
+  const desktopInp = document.getElementById('quick-input');
+  const saved = desktopInp.value;
+  desktopInp.value = mobileInp.value;
+  quickInputSubmit();
+  // quickInputSubmit clears desktopInp, read result
+  mobileInp.value = '';
+  desktopInp.value = saved;
+  qiClose();
+}
 
 /* ══════════════════════════════════════════════════
    INIT
