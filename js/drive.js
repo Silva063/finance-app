@@ -429,7 +429,11 @@ function driveDebouncedPush(app) {
           const added  = merged.dates.length - (invState.dates || []).length;
           invState = merged;
           invSaveState();
-          if (added > 0) { invLoadRates(); invCurId = null; invRenderSidebar(); syncLog(`⇄ Инвентаризация: подтянуто ${added} записей с Drive`, 'ok'); }
+          invLoadRates();
+          if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
+          invRenderSidebar();
+          if (invCurId) invRenderCurrent();
+          if (added > 0) syncLog(`⇄ Инвентаризация: подтянуто ${added} записей с Drive`, 'ok');
         } else {
           invState._lastModified = new Date().toISOString();
           invSaveState();
@@ -489,8 +493,9 @@ async function _syncOne(key, label) {
     invState = merged;
     invSaveState();
     invLoadRates();
-    invCurId = null;
+    if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
     invRenderSidebar();
+    if (invCurId) invRenderCurrent();
     await driveUploadFile(fname, invState);
     syncLog(`⇄ ${label}: merge завершён (+${delta} с Drive), загружено`, 'ok');
   }
@@ -680,8 +685,9 @@ async function _driveStartupSync() {
               invState = merged;
               invSaveState();
               invLoadRates();
-              invCurId = null;
+              if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
               invRenderSidebar();
+              if (invCurId) invRenderCurrent();
               mergedAnything = true;
               syncLog(`⇄ Инвентаризация: подтянуто с Drive при старте (+${Math.max(0, after - before)})`, 'ok');
             }

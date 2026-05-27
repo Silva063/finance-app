@@ -1452,6 +1452,7 @@ function invCreate() {
   }
   invState.dates.push({ ...rec, _editedAt: new Date().toISOString() }); invSaveState();
   invCloseModal(); invCurId = dateStr; invRenderSidebar(); invRenderCurrent();
+  if (driveToken) driveDebouncedPush('inv');
 }
 
 // ── Export / Import ───────────────────────────────
