@@ -2748,6 +2748,33 @@ function invGoalColor(stored) {
   return stored;
 }
 
+function invRenderGoalBlocks(selectedIds) {
+  const wrap = document.getElementById('goal-blocks-wrap');
+  if (!wrap) return;
+  const secs = invSections();
+  if (!secs.length) {
+    wrap.innerHTML = '<div style="color:var(--muted2);font-size:11px;padding:6px 0;">Блоков нет</div>';
+    return;
+  }
+  const useAll = !selectedIds || selectedIds.length === 0;
+  wrap.innerHTML = secs.map(s => {
+    const checked = useAll || selectedIds.includes(s.id);
+    return `<div class="goal-blk-row" onclick="var cb=document.getElementById('goal-blk-${s.id}');cb.checked=!cb.checked;">
+      <input type="checkbox" id="goal-blk-${s.id}" ${checked ? 'checked' : ''}>
+      <span class="goal-blk-check"></span>
+      <span style="flex:1;font-size:13px;color:var(--text);">${s.name}</span>
+      <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--bg4);color:var(--muted);">${s.currency}</span>
+    </div>`;
+  }).join('');
+}
+
+function invGoalBlocksAll()  {
+  document.querySelectorAll('#goal-blocks-wrap input[type=checkbox]').forEach(cb => cb.checked = true);
+}
+function invGoalBlocksNone() {
+  document.querySelectorAll('#goal-blocks-wrap input[type=checkbox]').forEach(cb => cb.checked = false);
+}
+
 function invRenderGoalSwatches() {
   const picker = document.getElementById('goal-color-picks');
   if (!picker) return;
@@ -2816,12 +2843,18 @@ function invSaveGoal() {
   const editId  = document.getElementById('goal-edit-id').value;
   if (!name)   { showInlineErr('goal-name', 'Введи название цели'); return; }
   if (!amount) { showInlineErr('goal-amount', 'Введи сумму цели'); return; }
+  const allSecIds = invSections().map(s => s.id);
+  const checkedIds = allSecIds.filter(id => {
+    const cb = document.getElementById(`goal-blk-${id}`);
+    return cb ? cb.checked : true;
+  });
+  const blocks = checkedIds.length === allSecIds.length ? [] : checkedIds;
   if (!invState.goals) invState.goals = [];
   if (editId) {
     const g = invState.goals.find(g => g.id === editId);
-    if (g) Object.assign(g, { name, amount, currency: cur, color });
+    if (g) Object.assign(g, { name, amount, currency: cur, color, blocks });
   } else {
-    invState.goals.push({ id: 'g_' + Date.now(), name, amount, currency: cur, color });
+    invState.goals.push({ id: 'g_' + Date.now(), name, amount, currency: cur, color, blocks });
   }
   invSaveState();
   if (driveToken) driveDebouncedPush('inv');
@@ -2842,6 +2875,7 @@ function invEditGoal(id) {
   document.getElementById('goal-form-label').textContent  = 'Редактировать цель';
   document.getElementById('goal-save-btn').textContent    = '\u2713 Сохранить изменения';
   document.getElementById('goal-cancel-edit-btn').style.display = '';
+  invRenderGoalBlocks(g.blocks || []);
   document.getElementById('goal-form-label').scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
@@ -2853,6 +2887,7 @@ function invCancelEditGoal() {
   document.getElementById('goal-form-label').textContent = 'Новая цель';
   document.getElementById('goal-save-btn').textContent   = '+ Добавить цель';
   document.getElementById('goal-cancel-edit-btn').style.display = 'none';
+  invRenderGoalBlocks([]);
 }
 
 function invDeleteGoal(id) {
@@ -2893,7 +2928,11 @@ function invCalcGoalProgress(goal) {
   const assetBreakdown = [];
   let totalInTarget = 0;
 
-  for (const sec of invSections()) {
+  const goalSections = (!goal.blocks || goal.blocks.length === 0)
+    ? invSections()
+    : invSections().filter(s => goal.blocks.includes(s.id));
+
+  for (const sec of goalSections) {
     let units = sec.ekosh
       ? (latest.secs[sec.id]?.val || 0)
       : sec.noms.reduce((a,n) => a + (latest.secs[sec.id]?.[n]||0)*n, 0);

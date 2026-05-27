@@ -757,6 +757,16 @@
           <!-- swatches rendered by invRenderGoalSwatches() -->
         </div>
       </div>
+      <div class="form-field">
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <span style="font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);">Учитывать блоки</span>
+          <div style="display:flex;gap:4px;margin-left:auto;">
+            <button class="btn btn-sm" type="button" onclick="invGoalBlocksAll()">Все</button>
+            <button class="btn btn-sm" type="button" onclick="invGoalBlocksNone()">Снять</button>
+          </div>
+        </div>
+        <div id="goal-blocks-wrap" style="max-height:140px;overflow-y:auto;"></div>
+      </div>
       <input type="hidden" id="goal-edit-id">
       <input type="hidden" id="goal-color-var">
     </div>

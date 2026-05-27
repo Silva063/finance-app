@@ -549,6 +549,53 @@ select.filter-input option { background: var(--bg2); }
   color: var(--muted);
   margin-bottom: 6px;
 }
+
+/* Goal block selector */
+.goal-blk-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: var(--bg3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line2);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .15s, background .15s;
+}
+.goal-blk-row:hover { border-color: var(--muted); }
+.goal-blk-row input[type=checkbox] { display: none; }
+
+.goal-blk-check {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted2);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color .15s, background .15s;
+}
+.goal-blk-row:has(input:checked) {
+  border-color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 8%, var(--bg3));
+}
+.goal-blk-row:has(input:checked) .goal-blk-check {
+  border-color: var(--acc);
+  background: var(--acc);
+}
+.goal-blk-row:has(input:checked) .goal-blk-check::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
 .form-field input,
 .form-field select,
 .form-field textarea {
