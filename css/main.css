@@ -958,6 +958,7 @@ select.filter-input option { background: var(--bg2); }
   font-size: 12px;
   color: var(--muted);
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1498,7 +1499,7 @@ select.filter-input option { background: var(--bg2); }
 /* ══════════════════════════════════════════════════
    RESPONSIVE: TABLET & MOBILE
 ══════════════════════════════════════════════════ */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
 
   /* Show hamburger, hide desktop tabs */
   .topbar-menu-btn { display: flex; }
@@ -1571,18 +1572,21 @@ select.filter-input option { background: var(--bg2); }
      Simple block layout: no grid, no absolute positioning.
      Each row = padded block card.
   ──────────────────────────────────────────────── */
-  .tbl-wrap { overflow-x: visible; border-radius: var(--radius); }
+  .tbl-wrap { overflow: hidden; border-radius: var(--radius); }
   .tbl-wrap table { min-width: unset; width: 100%; }
 
   /* Hide column headers on mobile */
   .tbl-wrap table thead { display: none; }
 
   /* tbody: normal block */
-  .tbl-wrap table tbody { display: block; }
+  .tbl-wrap table tbody { display: block; width: 100%; }
 
   /* Each row: card style */
   .tbl-wrap table tbody tr {
     display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 10px 50px 10px 14px; /* right padding leaves room for edit button */
     border-bottom: 1px solid var(--line);
     position: relative;
@@ -1601,6 +1605,13 @@ select.filter-input option { background: var(--bg2); }
     vertical-align: unset;
     white-space: normal;
     overflow: visible;
+  }
+  /* Content cells only (not the absolute edit-btn td): constrain to row width */
+  .tbl-wrap table tbody td:not(:last-child) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   /* Date cell: small muted */
@@ -1627,19 +1638,18 @@ select.filter-input option { background: var(--bg2); }
   .tbl-wrap table tbody td.amt-pos { color: var(--green) !important; }
   .tbl-wrap table tbody td.amt-neg { color: var(--red) !important; }
 
-  /* Comment cells */
+  /* Comment cells: allow wrapping on mobile cards */
   .tbl-wrap table tbody td:nth-child(4),
   .tbl-wrap table tbody td:nth-child(5) {
     font-size: 11px;
     color: var(--muted);
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
   }
 
-  /* Action/edit button cell */
-  .tbl-wrap table tbody td:last-child {
+  /* Action/edit button cell (skip detail rows that have only one td) */
+  .tbl-wrap table tbody tr:not(.txn-items-row) td:last-child {
     position: absolute;
     top: 8px;
     right: 8px;
@@ -1679,13 +1689,26 @@ select.filter-input option { background: var(--bg2); }
   .tbl-wrap table tbody tr.txn-items-row {
     padding: 0;
     background: var(--bg3);
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .tbl-wrap table tbody tr.txn-items-row td {
     display: block;
     padding: 0;
-    overflow: visible;
+    overflow: hidden;
     white-space: normal;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
+  /* Detail wrap: compact left padding on mobile */
+  .txn-items-wrap { padding-left: 14px; }
+  /* Detail header: wrap on narrow screens */
+  .txn-items-header { flex-wrap: wrap; gap: 3px; row-gap: 3px; }
+  /* Detail item columns: compact on mobile */
+  .txn-item-price { min-width: 55px; font-size: 10px; }
+  .txn-item-total { min-width: 60px; font-size: 10px; }
 
   /* p2, p5: running total column hidden */
   #p2body tr:not(.month-subtotal-row) td:nth-child(4),
@@ -1807,6 +1830,8 @@ select.filter-input option { background: var(--bg2); }
   .month-header { padding: 10px 12px; }
   .month-stats { gap: 8px; flex-wrap: wrap; }
   .month-stat { font-size: 10px; }
+  /* Month view inline rows: prevent horizontal overflow */
+  .txn-row-inline { overflow: hidden; max-width: 100%; }
 
   /* Filters: full-width inputs */
   .filters { gap: 6px; }
@@ -1907,13 +1932,6 @@ select.filter-input option { background: var(--bg2); }
   .tbl-wrap table tbody td:nth-child(4) { max-width: 160px; }
 }
 
-/* Tablet: keep sidebar but slightly narrower */
-@media (min-width: 769px) and (max-width: 1024px) {
-  :root { --sidebar-w: 190px; }
-  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .page { padding: 20px 20px; }
-  .stat-card-value { font-size: 16px; }
-}
 /* ── Toast / inline confirm ─────────────────────── */
 #toast-container {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
