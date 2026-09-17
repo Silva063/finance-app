@@ -168,11 +168,81 @@
       <div class="page-title">Все операции</div>
       <div class="page-sub">Наличные и безналичные движения в руб ПМР</div>
       <div class="stat-grid stat-grid-4" id="p1stats"></div>
-      <div class="chart-block">
+      <div class="chart-block" id="c1-block">
         <div class="chart-block-header">
           <div class="chart-block-title">Доходы и расходы по месяцам</div>
+          <div class="chart-tools">
+            <div class="chart-range-group" id="c1-range">
+              <button class="chart-range-btn" data-range="6"  onclick="c1SetRange(6)">6М</button>
+              <button class="chart-range-btn" data-range="12" onclick="c1SetRange(12)">12М</button>
+              <button class="chart-range-btn" data-range="24" onclick="c1SetRange(24)">24М</button>
+              <button class="chart-range-btn" data-range="0"  onclick="c1SetRange(0)">Все</button>
+            </div>
+            <button class="chart-cfg-btn" id="c1-cfg-btn" onclick="c1ToggleCfg()" title="Настройки графика">⚙</button>
+          </div>
         </div>
-        <div class="chart-canvas-wrap"><canvas id="chart1"></canvas></div>
+
+        <div class="chart-cfg" id="c1-cfg" hidden>
+          <div class="chart-cfg-grid">
+            <label class="chart-cfg-field">
+              <span>Тип диаграммы</span>
+              <select class="filter-input" id="c1-type" onchange="c1Set('type',this.value)">
+                <option value="bar">Столбцы рядом</option>
+                <option value="stacked">Столбцы стопкой</option>
+                <option value="line">Линии</option>
+                <option value="area">Области</option>
+                <option value="combo">Столбцы + линия итога</option>
+              </select>
+            </label>
+            <label class="chart-cfg-field">
+              <span>Ориентация</span>
+              <select class="filter-input" id="c1-orient" onchange="c1Set('orient',this.value)">
+                <option value="v">Вертикально</option>
+                <option value="h">Горизонтально</option>
+              </select>
+            </label>
+            <label class="chart-cfg-field">
+              <span>Плотность</span>
+              <select class="filter-input" id="c1-density" onchange="c1Set('density',this.value)">
+                <option value="auto">Авто</option>
+                <option value="compact">Компактно</option>
+                <option value="normal">Обычно</option>
+                <option value="wide">Просторно</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="chart-cfg-row">
+            <span class="chart-cfg-cap">Ряды</span>
+            <div class="chart-chips">
+              <button class="chart-chip" data-k="income"  onclick="c1Toggle('income')">Приход</button>
+              <button class="chart-chip" data-k="expense" onclick="c1Toggle('expense')">Расход</button>
+              <button class="chart-chip" data-k="net"     onclick="c1Toggle('net')">Итог</button>
+              <button class="chart-chip" data-k="cum"     onclick="c1Toggle('cum')">Накопительно</button>
+              <button class="chart-chip" data-k="avg"     onclick="c1Toggle('avg')">Средние</button>
+            </div>
+          </div>
+
+          <div class="chart-cfg-row">
+            <span class="chart-cfg-cap">Отображение</span>
+            <div class="chart-chips">
+              <button class="chart-chip" data-k="legend"   onclick="c1Toggle('legend')">Легенда</button>
+              <button class="chart-chip" data-k="grid"     onclick="c1Toggle('grid')">Сетка</button>
+              <button class="chart-chip" data-k="values"   onclick="c1Toggle('values')">Значения</button>
+              <button class="chart-chip" data-k="netTicks" onclick="c1Toggle('netTicks')">Итог под осью</button>
+              <button class="chart-chip" data-k="smooth"   onclick="c1Toggle('smooth')">Сглаживание</button>
+            </div>
+          </div>
+
+          <div class="chart-cfg-foot">
+            <button class="filter-reset" onclick="c1Reset()">↺ Сбросить вид</button>
+          </div>
+        </div>
+
+        <div class="chart-scroll" id="c1-scroll">
+          <div class="chart-canvas-wrap" id="c1-wrap"><canvas id="chart1"></canvas></div>
+        </div>
+        <div class="chart-foot" id="c1-foot"></div>
       </div>
       <div class="filters">
         <input class="filter-input" type="text" id="f1search" placeholder="Поиск..." oninput="renderP1()">

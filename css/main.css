@@ -509,6 +509,95 @@ select.filter-input option { background: var(--bg2); }
 .chart-range-btn.is-active { background: var(--bg3); border-color: var(--acc); color: var(--acc2); }
 .chart-canvas-wrap { position: relative; height: 190px; }
 
+/* ── Chart block: инструменты и настройки вида ──── */
+.chart-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.chart-cfg-btn {
+  width: 26px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.chart-cfg-btn:hover { background: var(--bg3); color: var(--text); }
+.chart-cfg-btn.is-active { background: var(--bg3); border-color: var(--acc); color: var(--acc2); }
+
+.chart-cfg {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 11px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* .chart-cfg задаёт display, поэтому атрибут hidden нужно перебить явно */
+.chart-cfg[hidden] { display: none; }
+.chart-cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.chart-cfg-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chart-cfg-field > span,
+.chart-cfg-cap {
+  font-size: 8.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+.chart-cfg-field .filter-input { width: 100%; font-size: 11px; padding: 6px 8px; }
+.chart-cfg-field .filter-input:disabled { opacity: .4; cursor: not-allowed; }
+.chart-cfg-row { display: flex; flex-direction: column; gap: 5px; }
+.chart-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chart-chip {
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.chart-chip:hover { background: var(--bg3); color: var(--text); }
+.chart-chip.is-active { background: var(--acc-glow); border-color: var(--acc); color: var(--acc2); }
+.chart-chip.is-muted { opacity: .4; }
+.chart-cfg-foot { display: flex; justify-content: flex-end; }
+
+/* Горизонтальная прокрутка графика — колонки не сжимаются при длинной истории */
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line2) transparent;
+}
+.chart-scroll::-webkit-scrollbar { height: 6px; }
+.chart-scroll::-webkit-scrollbar-track { background: transparent; }
+.chart-scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 3px; }
+.chart-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted2); }
+.chart-foot {
+  font-size: 9px;
+  color: var(--muted2);
+  margin-top: 6px;
+  letter-spacing: .04em;
+}
+
 /* ══════════════════════════════════════════════════
    MODAL / OVERLAY (unified)
 ══════════════════════════════════════════════════ */
@@ -1825,6 +1914,15 @@ select.filter-input option { background: var(--bg2); }
 
   /* Charts: smaller height */
   .chart-canvas-wrap { height: 150px; }
+  .chart-block { padding: 14px 12px; }
+  .chart-block-header { flex-wrap: wrap; gap: 8px; }
+  .chart-tools { width: 100%; justify-content: space-between; }
+  .chart-range-group { flex: 1; }
+  .chart-range-btn { flex: 1; padding: 5px 6px; }
+  .chart-cfg-grid { grid-template-columns: 1fr 1fr; }
+  .chart-cfg-field .filter-input { font-size: 12px; padding: 7px 8px; }
+  .chart-chip { padding: 6px 10px; font-size: 10.5px; }
+  .chart-scroll::-webkit-scrollbar { height: 4px; }
 
   /* Month blocks: tighter */
   .month-header { padding: 10px 12px; }

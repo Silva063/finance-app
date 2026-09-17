@@ -346,67 +346,363 @@ function renderP1() {
   }
   document.getElementById('p1body').innerHTML = rows;
 
-  // chart
+  // chart — данные считаем здесь, отрисовкой занимается c1Render()
+  const allMonths  = getMonths();
+  const filtMonths = year ? allMonths.filter(m => m.startsWith(year)) : allMonths;
+  c1Data = {
+    months : filtMonths,
+    income : filtMonths.map(m => +(txnsByMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)).toFixed(2)),
+    expense: filtMonths.map(m => +(Math.abs(txnsByMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0))).toFixed(2))
+  };
+  c1SyncControls();
+  c1Render();
+}
+
+/* ══════════════════════════════════════════════════
+   CHART 1 — «Доходы и расходы по месяцам»
+   Настраиваемый график: типы диаграмм, ряды, плотность.
+   Вместо сжатия колонок — собственная ширина холста + прокрутка.
+══════════════════════════════════════════════════ */
+
+const C1_CFG_KEY = 'finChart1Cfg';
+const C1_CFG_DEFAULT = {
+  type: 'bar',      // bar | stacked | line | area | combo
+  orient: 'v',      // v | h  (только для столбчатых)
+  range: 12,        // последние N месяцев, 0 = все
+  density: 'auto',  // auto | compact | normal | wide
+  income: true, expense: true, net: false, cum: false, avg: false,
+  legend: true, grid: true, values: false, netTicks: true, smooth: true
+};
+const C1_BARLIKE = new Set(['bar', 'stacked', 'combo']);
+
+let c1Cfg = (() => {
+  try { return { ...C1_CFG_DEFAULT, ...(JSON.parse(localStorage.getItem(C1_CFG_KEY)) || {}) }; }
+  catch (e) { return { ...C1_CFG_DEFAULT }; }
+})();
+let c1Data = { months: [], income: [], expense: [] };
+
+function c1SaveCfg() { try { localStorage.setItem(C1_CFG_KEY, JSON.stringify(c1Cfg)); } catch (e) {} }
+
+function c1Set(k, v)   { c1Cfg[k] = v; c1SaveCfg(); c1SyncControls(); c1Render(); }
+function c1Toggle(k)   { c1Set(k, !c1Cfg[k]); }
+function c1SetRange(n) { c1Set('range', +n); }
+function c1Reset()     { c1Cfg = { ...C1_CFG_DEFAULT }; c1SaveCfg(); c1SyncControls(); c1Render(); }
+
+function c1ToggleCfg() {
+  const p = document.getElementById('c1-cfg');
+  if (!p) return;
+  p.hidden = !p.hidden;
+  document.getElementById('c1-cfg-btn')?.classList.toggle('is-active', !p.hidden);
+  if (!p.hidden) c1SyncControls();
+}
+
+// Компактный формат чисел для подписей: 12 345 → 12,3к
+function c1Compact(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',') + 'М';
+  if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace('.', ',') + 'к';
+  return String(Math.round(v));
+}
+
+function c1SyncControls() {
+  const el = id => document.getElementById(id);
+  const t = el('c1-type');    if (t) t.value = c1Cfg.type;
+  const o = el('c1-orient');  if (o) { o.value = c1Cfg.orient; o.disabled = !C1_BARLIKE.has(c1Cfg.type); }
+  const d = el('c1-density'); if (d) d.value = c1Cfg.density;
+  document.querySelectorAll('#c1-range .chart-range-btn').forEach(b =>
+    b.classList.toggle('is-active', +b.dataset.range === +c1Cfg.range));
+  document.querySelectorAll('#c1-block .chart-chip').forEach(b =>
+    b.classList.toggle('is-active', !!c1Cfg[b.dataset.k]));
+  // Опции, которые в текущем режиме ни на что не влияют, показываем приглушённо
+  const horiz = C1_BARLIKE.has(c1Cfg.type) && c1Cfg.orient === 'h';
+  const lineish = c1Cfg.type === 'line' || c1Cfg.type === 'area';
+  const chipNet = document.querySelector('#c1-block .chart-chip[data-k="netTicks"]');
+  if (chipNet) chipNet.classList.toggle('is-muted', horiz);
+  const chipSm = document.querySelector('#c1-block .chart-chip[data-k="smooth"]');
+  if (chipSm) chipSm.classList.toggle('is-muted', !(lineish || c1Cfg.net || c1Cfg.cum || c1Cfg.type === 'combo'));
+}
+
+// Цвета рядов вынесены отдельно — чтобы менять тему без пересборки графика
+function c1Colors() {
+  const g = cssVar('--green'), r = cssVar('--red'), a = cssVar('--acc'), a2 = cssVar('--acc2');
+  const area = c1Cfg.type === 'area';
+  return {
+    income : { backgroundColor: area ? g + '33' : g + '8c', borderColor: g,  pointBackgroundColor: g },
+    expense: { backgroundColor: area ? r + '33' : r + '8c', borderColor: r,  pointBackgroundColor: r },
+    net    : { backgroundColor: a2 + '22', borderColor: a2, pointBackgroundColor: a2 },
+    cum    : { backgroundColor: 'transparent', borderColor: a, pointBackgroundColor: a },
+    avgIn  : { backgroundColor: 'transparent', borderColor: g, pointBackgroundColor: g },
+    avgEx  : { backgroundColor: 'transparent', borderColor: r, pointBackgroundColor: r }
+  };
+}
+
+function c1Recolor() {
+  if (!chart1Inst) return;
+  const c = c1Colors();
+  chart1Inst.data.datasets.forEach(d => { const p = c[d._role]; if (p) Object.assign(d, p); });
+  const ax = chart1Inst._catAxis;
+  if (ax && chart1Inst.options.scales?.[ax]) chart1Inst.options.scales[ax].ticks.color = chart1Inst._tickColor;
+  chart1Inst.update('none');
+}
+
+// Плагин подписей значений (chartjs-datalabels не подключён — рисуем сами)
+const C1_VALUES_PLUGIN = {
+  id: 'c1values',
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.enabled) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = '9px "JetBrains Mono", monospace';
+    chart.data.datasets.forEach((ds, di) => {
+      if (ds._role === 'avgIn' || ds._role === 'avgEx') return;
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      ctx.fillStyle = ds.borderColor || '#888';
+      meta.data.forEach((el, i) => {
+        const v = ds.data[i];
+        if (v === null || v === undefined || v === 0) return;
+        const txt = c1Compact(v);
+        if (opts.horiz) {
+          ctx.textAlign = v < 0 ? 'right' : 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(txt, el.x + (v < 0 ? -4 : 4), el.y);
+        } else {
+          ctx.textAlign = 'center';
+          ctx.textBaseline = v < 0 ? 'top' : 'bottom';
+          ctx.fillText(txt, el.x, el.y + (v < 0 ? 3 : -3));
+        }
+      });
+    });
+    ctx.restore();
+  }
+};
+if (typeof Chart !== 'undefined') Chart.register(C1_VALUES_PLUGIN);
+
+// Размеры холста: вместо сжатия колонок даём графику собственную ширину
+// с горизонтальной прокруткой (а в горизонтальном режиме — растим высоту).
+function c1Layout(n, seriesCnt) {
+  const scroll = document.getElementById('c1-scroll');
+  const wrap   = document.getElementById('c1-wrap');
+  if (!scroll || !wrap) return { horiz: false, scrollable: false };
+
+  const horiz  = C1_BARLIKE.has(c1Cfg.type) && c1Cfg.orient === 'h';
+  const narrow = window.innerWidth <= 1024;
+  const avail  = Math.max(scroll.clientWidth || (window.innerWidth - 40), 220);
+  const baseH  = narrow ? 200 : 240;
+
+  if (horiz) {
+    const per = ({ compact: 18, normal: 28, wide: 40 })[c1Cfg.density]
+              || (n > 30 ? 20 : n > 14 ? 26 : 34);
+    const mult = seriesCnt > 2 ? 1.2 : 1;
+    wrap.style.width  = '100%';
+    wrap.style.height = Math.max(baseH, Math.round(n * per * mult) + 44) + 'px';
+    scroll.classList.remove('is-scrollable');
+    return { horiz, scrollable: false };
+  }
+
+  // Минимальная ширина на месяц — чтобы столбцы оставались читаемыми
+  const barCnt = (c1Cfg.income ? 1 : 0) + (c1Cfg.expense ? 1 : 0);
+  const autoPer = C1_BARLIKE.has(c1Cfg.type)
+    ? (c1Cfg.type === 'stacked' ? 32 : barCnt >= 2 ? 42 : 32)
+    : 30;
+  const per = ({ compact: 26, normal: 44, wide: 66 })[c1Cfg.density] || autoPer;
+  const w   = Math.max(avail, Math.round(n * per) + 28);
+  wrap.style.width  = w + 'px';
+  wrap.style.height = baseH + 'px';
+  const scrollable = w > avail + 2;
+  scroll.classList.toggle('is-scrollable', scrollable);
+  return { horiz, scrollable, w, avail };
+}
+
+function c1Render() {
+  const canvas = document.getElementById('chart1');
+  const foot   = document.getElementById('c1-foot');
+  if (!canvas || typeof Chart === 'undefined') return;
   if (chart1Inst) { chart1Inst.destroy(); chart1Inst = null; }
-  const allMonths   = getMonths();
-  const filtMonths  = year ? allMonths.filter(m => m.startsWith(year)) : allMonths;
-  const incomeData  = filtMonths.map(m => +(txnsByMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)).toFixed(2));
-  const expenseData = filtMonths.map(m => +(Math.abs(txnsByMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0))).toFixed(2));
-  const netData     = filtMonths.map((m,i) => +(incomeData[i] - expenseData[i]).toFixed(2));
-  // Full month name label (e.g. "Январь 2025")
-  const labels      = filtMonths.map(m => {
-    const [y, mo] = m.split('-');
-    return MONTHS_RU[+mo - 1].charAt(0).toUpperCase() + MONTHS_RU[+mo - 1].slice(1) + ' ' + y;
+
+  const mAll = c1Data.months || [];
+  const iAll = c1Data.income || [], eAll = c1Data.expense || [];
+  const nAll = mAll.map((_, i) => +((iAll[i] || 0) - (eAll[i] || 0)).toFixed(2));
+  const cAll = []; let run = 0;
+  nAll.forEach(v => { run = +(run + v).toFixed(2); cAll.push(run); });
+
+  const from = (c1Cfg.range && mAll.length > c1Cfg.range) ? mAll.length - c1Cfg.range : 0;
+  const months = mAll.slice(from);
+  const income = iAll.slice(from), expense = eAll.slice(from);
+  const net    = nAll.slice(from), cum = cAll.slice(from);
+  const n = months.length;
+
+  if (!n) {
+    const wrap = document.getElementById('c1-wrap');
+    if (wrap) { wrap.style.width = '100%'; wrap.style.height = '110px'; }
+    const sc = document.getElementById('c1-scroll');
+    sc?.classList.remove('is-scrollable');
+    if (foot) foot.textContent = 'Нет данных за выбранный период';
+    return;
+  }
+
+  const full = months.map(m => {
+    const mo = +m.slice(5, 7);
+    return MONTHS_RU[mo - 1].charAt(0).toUpperCase() + MONTHS_RU[mo - 1].slice(1) + ' ' + m.slice(0, 4);
+  });
+  // Короткая подпись: год дописываем у января и у первого месяца — иначе годы сливаются
+  const short = months.map((m, i) => {
+    const mo = +m.slice(5, 7), lbl = MONTHS_SHORT[mo - 1];
+    return (mo === 1 || i === 0) ? lbl + ' ' + m.slice(2, 4) : lbl;
   });
 
-  const shortLabels = filtMonths.map(m => MONTHS_SHORT[+m.split('-')[1]-1]);
+  const nowYM  = new Date().toISOString().slice(0, 7);
+  const curIdx = months.indexOf(nowYM);
 
-  const nowYM = new Date().toISOString().slice(0,7);
-  const curIdx = filtMonths.indexOf(nowYM);
+  const stacked = c1Cfg.type === 'stacked';
+  const lineish = c1Cfg.type === 'line' || c1Cfg.type === 'area';
+  const showNet = c1Cfg.net || c1Cfg.type === 'combo';
+  const col     = c1Colors();
+  const tension = c1Cfg.smooth ? 0.35 : 0;
 
-  chart1Inst = new Chart(document.getElementById('chart1'), {
-    type: 'bar',
-    data: { labels, datasets: [
-      { label:'Приход', data:incomeData,  backgroundColor: cssVar('--green')+'8c', borderColor: cssVar('--green'), borderWidth:1, borderRadius:3 },
-      { label:'Расход', data:expenseData, backgroundColor: cssVar('--red')+'8c',   borderColor: cssVar('--red'),   borderWidth:1, borderRadius:3 }
-    ]},
-    options: { ...getChartDefaults(),
-      plugins: { ...getChartDefaults().plugins,
-        annotation: undefined,
-        tooltip: { ...getChartDefaults().plugins.tooltip,
+  // В режиме стопки расход уводим вниз от нуля — иначе стопка сложит приход с расходом
+  const expVals = stacked ? expense.map(v => -v) : expense;
+
+  const seriesCnt = (c1Cfg.income ? 1 : 0) + (c1Cfg.expense ? 1 : 0) + (showNet ? 1 : 0) + (c1Cfg.cum ? 1 : 0);
+  const L = c1Layout(n, seriesCnt);
+  const horiz = L.horiz;
+  // вторая ось значений: в горизонтальном режиме значения идут по x, а не по y
+  const cumAxis = horiz ? { xAxisID: 'y1' } : { yAxisID: 'y1' };
+
+  const barBase  = { borderWidth: 1, borderRadius: 3, categoryPercentage: 0.78, barPercentage: 0.9 };
+  const lineBase = { type: 'line', borderWidth: 2, tension, pointRadius: n > 24 ? 0 : 2.5, pointHoverRadius: 4, fill: false };
+
+  const ds = [];
+  if (c1Cfg.income)
+    ds.push({ _role: 'income', label: 'Приход', data: income, ...col.income,
+      ...(lineish ? { ...lineBase, fill: c1Cfg.type === 'area' } : barBase) });
+  if (c1Cfg.expense)
+    ds.push({ _role: 'expense', label: 'Расход', data: expVals, ...col.expense,
+      ...(lineish ? { ...lineBase, fill: c1Cfg.type === 'area' } : barBase) });
+  if (showNet)
+    ds.push({ _role: 'net', label: 'Итог', data: net, ...col.net, ...lineBase, order: 0 });
+  if (c1Cfg.cum)
+    ds.push({ _role: 'cum', label: 'Накопительно', data: cum, ...col.cum, ...lineBase,
+      borderDash: [5, 4], ...cumAxis, order: 0 });
+  if (c1Cfg.avg) {
+    const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const avgBase = { type: 'line', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0, order: 0 };
+    if (c1Cfg.income)
+      ds.push({ _role: 'avgIn', label: 'Ср. приход', data: Array(n).fill(+avg(income).toFixed(2)), ...col.avgIn, ...avgBase });
+    if (c1Cfg.expense)
+      ds.push({ _role: 'avgEx', label: 'Ср. расход', data: Array(n).fill(+avg(expVals).toFixed(2)), ...col.avgEx, ...avgBase });
+  }
+
+  const base  = getChartDefaults();
+  const catAx = horiz ? 'y' : 'x';
+  const valAx = horiz ? 'x' : 'y';
+  const showNetTicks = c1Cfg.netTicks && !horiz;
+
+  const tickColor = ctx => {
+    if (ctx.index === curIdx) return cssVar('--acc2');
+    if (!showNetTicks) return cssVar('--muted');
+    return (net[ctx.index] || 0) >= 0 ? cssVar('--green') : cssVar('--red');
+  };
+
+  const scales = {};
+  scales[catAx] = {
+    stacked,
+    grid: { color: cssVar('--line'), display: c1Cfg.grid && horiz },
+    ticks: {
+      color: tickColor,
+      maxRotation: 0, minRotation: 0, autoSkip: false,
+      font: { family: 'JetBrains Mono', size: 9 },
+      callback(_v, i) {
+        const lbl = (i === curIdx ? '▸ ' : '') + (short[i] || '');
+        if (!showNetTicks) return lbl;
+        const v = net[i] || 0;
+        return [lbl, (v >= 0 ? '+' : '') + c1Compact(v)];
+      }
+    }
+  };
+  scales[valAx] = {
+    stacked,
+    grid: { color: cssVar('--line'), display: c1Cfg.grid },
+    ticks: {
+      color: cssVar('--muted'),
+      font: { family: 'JetBrains Mono', size: 9 },
+      maxTicksLimit: horiz ? 5 : 6,
+      callback: v => c1Compact(v)
+    }
+  };
+  if (c1Cfg.cum) scales.y1 = {
+    position: horiz ? 'top' : 'right',
+    grid: { display: false },
+    ticks: { color: cssVar('--acc'), font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 5, callback: v => c1Compact(v) }
+  };
+
+  chart1Inst = new Chart(canvas, {
+    type: lineish ? 'line' : 'bar',
+    data: { labels: short, datasets: ds },
+    options: {
+      ...base,
+      indexAxis: horiz ? 'y' : 'x',
+      animation: n > 36 ? false : { duration: 300 },
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: {
+        top:    c1Cfg.values && !horiz ? 14 : 2,
+        bottom: c1Cfg.values && !horiz && stacked ? 12 : 0,
+        right:  c1Cfg.values && horiz ? 38 : 2,
+        left:   c1Cfg.values && horiz && stacked ? 38 : 0
+      } },
+      plugins: {
+        ...base.plugins,
+        legend: { ...base.plugins.legend, display: c1Cfg.legend,
+          labels: { ...base.plugins.legend.labels, boxWidth: 10, boxHeight: 10, padding: 8, usePointStyle: true } },
+        c1values: { enabled: !!c1Cfg.values, horiz },
+        tooltip: {
+          ...base.plugins.tooltip,
           callbacks: {
-            title: ctx => labels[ctx[0]?.dataIndex] || '',
+            title: ctx => full[ctx[0]?.dataIndex] ?? '',
+            label(ctx) {
+              const v = ctx.parsed[horiz ? 'x' : 'y'];
+              const r = ctx.dataset._role;
+              const sign = (r === 'net' || r === 'cum') ? (v >= 0 ? '+' : '−') : '';
+              return `${ctx.dataset.label}: ${sign}${Math.abs(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}`;
+            },
             afterBody(ctx) {
               const i = ctx[0]?.dataIndex;
-              if (i === undefined) return '';
-              const net = netData[i];
-              return `Итог: ${net >= 0 ? '+' : ''}${net.toLocaleString('ru-RU', {maximumFractionDigits:2})}`;
+              if (i === undefined || showNet) return '';
+              const v = net[i];
+              return `Итог: ${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}`;
             }
           }
         }
       },
-      scales: { ...getChartDefaults().scales,
-        x: { ...getChartDefaults().scales.x,
-          ticks: { ...getChartDefaults().scales.x.ticks,
-            callback(val, i) {
-              const lbl  = shortLabels[i] || '';
-              const net  = netData[i];
-              const sign = net >= 0 ? '+' : '';
-              return i === curIdx ? ['▸ ' + lbl, sign + Math.round(net)] : [lbl, sign + Math.round(net)];
-            },
-            color(ctx) {
-              const net = netData[ctx.index];
-              if (ctx.index === curIdx) return cssVar('--acc2');
-              return net >= 0 ? cssVar('--green') : cssVar('--red');
-            },
-            maxRotation: 0,
-            font: { family: 'JetBrains Mono', size: 9 }
-          }
-        }
-      }
+      scales
     }
   });
+  chart1Inst._catAxis   = catAx;
+  chart1Inst._tickColor = tickColor;
+
+  // Прокручиваем к последним месяцам — они интереснее всего
+  const scroll = document.getElementById('c1-scroll');
+  if (scroll && L.scrollable) {
+    scroll.scrollLeft = scroll.scrollWidth;
+    requestAnimationFrame(() => { scroll.scrollLeft = scroll.scrollWidth; });
+  }
+
+  if (foot) {
+    const total = mAll.length;
+    const parts = [`${n} мес.` + (total > n ? ` из ${total}` : '')];
+    if (L.scrollable) parts.push('график прокручивается по горизонтали →');
+    foot.textContent = parts.join(' · ');
+  }
 }
+
+// Пересчёт ширины при повороте экрана / ресайзе окна
+let c1ResizeT = null;
+window.addEventListener('resize', () => {
+  clearTimeout(c1ResizeT);
+  c1ResizeT = setTimeout(() => {
+    if (chart1Inst && document.getElementById('op-p1')?.classList.contains('is-active')) c1Render();
+  }, 180);
+});
 
 // ── Page 2 — Beznal ───────────────────────────────
 function renderP2() {

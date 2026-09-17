@@ -393,12 +393,9 @@ function themeUpdateChartColors() {
   }
   // Also update dataset colors for known charts
   const cGreen = cssVar('--green'), cRed = cssVar('--red'), cAcc = cssVar('--acc');
-  if (typeof chart1Inst !== 'undefined' && chart1Inst?.data?.datasets?.length >= 2) {
-    chart1Inst.data.datasets[0].backgroundColor = cGreen + '8c';
-    chart1Inst.data.datasets[0].borderColor      = cGreen;
-    chart1Inst.data.datasets[1].backgroundColor  = cRed + '8c';
-    chart1Inst.data.datasets[1].borderColor       = cRed;
-    chart1Inst.update('none');
+  // chart1 перекрашивает себя сам — набор рядов там зависит от настроек вида
+  if (typeof c1Recolor === 'function' && typeof chart1Inst !== 'undefined' && chart1Inst) {
+    c1Recolor();
   }
   if (typeof invChartA !== 'undefined' && invChartA?.data?.datasets?.length >= 2) {
     invChartA.data.datasets[0].borderColor      = cAcc;
