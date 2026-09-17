@@ -132,6 +132,11 @@
       <div class="sidebar-nav-dot"></div>
       <div>Категории</div>
     </div>
+    <div class="sidebar-nav-item" onclick="opsNav('op-p7');closeSidebar()">
+      <div class="sidebar-nav-dot"></div>
+      <div>Корзина</div>
+      <span class="nav-count" id="nav-trash-count" hidden></span>
+    </div>
     </div><!-- /sidebar-nav-scroll -->
 
     <!-- Быстрый ввод (только desktop — на мобильном есть плавающая панель) -->
@@ -302,6 +307,30 @@
       <div class="tbl-wrap" style="margin-top:16px;">
         <table><thead><tr><th>Категория</th><th>Кол-во</th><th>Сумма</th><th>%</th></tr></thead>
         <tbody id="p6body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- PAGE: Корзина -->
+    <div class="page" id="op-p7">
+      <div class="page-title">Корзина</div>
+      <div class="page-sub">Удалённые операции хранятся здесь, пока вы их не вычистите</div>
+
+      <div class="tbl-wrap" id="p7-wrap">
+        <div class="tbl-header">
+          <div class="tbl-caption" id="p7count">—</div>
+          <div id="p7-tools" style="display:none;gap:6px;">
+            <button class="btn btn-sm" onclick="opsRestoreAll()">↺ Восстановить всё</button>
+            <button class="btn btn-sm btn-danger" onclick="opsPurgeAll()">✕ Очистить</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Дата</th><th>Операция</th><th>Сумма</th><th>Комментарий</th><th>Удалено</th><th></th></tr></thead>
+          <tbody id="p7body"></tbody>
+        </table>
+      </div>
+
+      <div class="trash-empty" id="p7-empty">
+        Корзина пуста. Удалённые операции попадают сюда и остаются до очистки.
       </div>
     </div>
 
@@ -994,6 +1023,7 @@
 <script src="js/utils.js"></script>
 <script src="js/app.js"></script>
 <script src="js/autocat.js"></script>
+<script src="js/swipe.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/snapshot.js"></script>
 <script src="js/drive.js"></script>

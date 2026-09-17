@@ -14,6 +14,51 @@ function showToast(msg, type, dur) {
   c.appendChild(t);
   setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),320); }, dur||2800);
 }
+// Экранирование для вставки пользовательского текста в HTML-строки.
+// Без него комментарий вида «цена < 100» ломает вёрстку строки.
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Тост с кнопкой действия — для отмены удаления.
+// Собирается из узлов, а не innerHTML: в msg попадает комментарий пользователя.
+function showUndoToast(msg, onUndo, dur) {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast toast-undo';
+
+  const text = document.createElement('span');
+  text.textContent = msg;
+
+  const btn = document.createElement('button');
+  btn.className = 'toast-action';
+  btn.type = 'button';
+  btn.textContent = 'Отменить';
+
+  const bar = document.createElement('span');
+  bar.className = 'toast-timer';
+
+  t.appendChild(text); t.appendChild(btn); t.appendChild(bar);
+  c.appendChild(t);
+
+  const ms = dur || 5000;
+  bar.style.animationDuration = ms + 'ms';
+
+  let done = false;
+  const close = () => {
+    if (done) return; done = true;
+    clearTimeout(timer);
+    t.style.opacity = '0'; t.style.transition = 'opacity .25s';
+    setTimeout(() => t.remove(), 260);
+  };
+  btn.onclick = () => { close(); try { onUndo(); } catch (e) { showErr('Не удалось отменить: ' + e.message); } };
+  const timer = setTimeout(close, ms);
+  return close;
+}
+
 function showErr(msg)  { showToast(msg, 'err',  3200); }
 function showOk(msg)   { showToast(msg, 'ok',   2400); }
 function showWarn(msg) { showToast(msg, 'warn', 3500); }

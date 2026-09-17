@@ -2061,6 +2061,92 @@ select.filter-input option { background: var(--bg2); }
   .tbl-wrap table tbody td:nth-child(4) { max-width: 160px; }
 }
 
+
+/* ══════════════════════════════════════════════════
+   СВАЙП ПО СТРОКЕ + КОРЗИНА
+══════════════════════════════════════════════════ */
+
+/* pan-y отдаёт браузеру вертикальный скролл, а горизонталь оставляет нам —
+   без этого iOS успевает начать скролл раньше, чем мы распознаем жест */
+tr[data-txnid], .txn-row-inline[data-txnid] {
+  touch-action: pan-y;
+  transition: transform .18s ease, opacity .18s ease, background .12s;
+}
+tr[data-txnid].is-swiping, .txn-row-inline[data-txnid].is-swiping {
+  transition: background .12s;   /* пока палец на экране — строка идёт за ним без задержки */
+}
+.is-swipe-del  { background: rgba(255, 80, 80, .10); }
+.is-swipe-edit { background: var(--acc-glow); }
+.is-swipe-del.is-swipe-armed  { background: rgba(255, 80, 80, .22); }
+.is-swipe-edit.is-swipe-armed { background: var(--acc-glow); box-shadow: inset 0 0 0 1px var(--acc); }
+
+.swipe-hint {
+  font-size: 9.5px;
+  color: var(--muted2);
+  letter-spacing: .04em;
+  margin-left: auto;
+  padding-left: 10px;
+}
+
+/* Счётчик удалённых на пункте меню */
+.nav-count {
+  margin-left: auto;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--bg3);
+  border: 1px solid var(--line2);
+  color: var(--muted2);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-align: center;
+}
+.nav-count[hidden] { display: none; }
+
+.trash-empty {
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--muted2);
+  font-size: 11px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius);
+}
+
+.row-edit-btn.is-danger { color: var(--muted2); }
+.row-edit-btn.is-danger:hover { color: var(--red); }
+
+/* Тост с кнопкой отмены */
+.toast-undo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 11px;
+}
+.toast-action {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--line2);
+  padding: 2px 0 2px 12px;
+  color: var(--acc2);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.toast-action:hover { color: var(--text); }
+.toast-timer {
+  position: absolute;
+  left: 0; bottom: 0; height: 2px;
+  background: var(--acc);
+  width: 100%;
+  transform-origin: left center;
+  animation: toastTimer linear forwards;
+}
+@keyframes toastTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
 /* ── Toast / inline confirm ─────────────────────── */
 #toast-container {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);

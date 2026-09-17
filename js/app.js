@@ -209,7 +209,7 @@ function calcSummary(txns) {
 }
 
 // ── Navigation ────────────────────────────────────
-const OPS_PAGES = ['op-p1','op-p2','op-p5','op-p3','op-p4','op-p6'];
+const OPS_PAGES = ['op-p1','op-p2','op-p5','op-p3','op-p4','op-p6','op-p7'];
 function opsNav(id) {
   document.querySelectorAll('#app-ops .page').forEach(p => p.classList.remove('is-active'));
   document.querySelectorAll('#app-ops .sidebar-nav-item').forEach(n => n.classList.remove('is-active'));
@@ -223,6 +223,7 @@ function opsNav(id) {
   if (id === 'op-p3') renderP3();
   if (id === 'op-p4') renderP4();
   if (id === 'op-p6') renderP6();
+  if (id === 'op-p7') renderP7();
 }
 function opsReRenderCurrent() {
   if (opsCurPage === 'op-p1') renderP1();
@@ -231,6 +232,8 @@ function opsReRenderCurrent() {
   else if (opsCurPage === 'op-p3') renderP3();
   else if (opsCurPage === 'op-p4') renderP4();
   else if (opsCurPage === 'op-p6') renderP6();
+  else if (opsCurPage === 'op-p7') renderP7();
+  opsUpdateTrashBadge();
 }
 
 // ── Filter helpers ────────────────────────────────
@@ -735,7 +738,7 @@ function renderP2() {
   let run = 0;
   const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
 
-  document.getElementById('p2body').innerHTML = [...withRun].reverse().map(t => `<tr>
+  document.getElementById('p2body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
     <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
     <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
@@ -775,7 +778,7 @@ function renderP5() {
   let run = 0;
   const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
 
-  document.getElementById('p5body').innerHTML = [...withRun].reverse().map(t => `<tr>
+  document.getElementById('p5body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
     <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
     <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
@@ -808,7 +811,7 @@ function renderP3() {
       const dt      = new Date(day + 'T12:00:00');
       dayRows += `<div class="day-label">${DAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_RU_GEN[dt.getMonth()]} — итог: <span style="color:${daySum>=0?'var(--green)':'var(--red)'}">${fmtAmt(daySum,true)}</span></div>`;
       dayRows += dayTxns.map(t => `
-        <div class="txn-row-inline">
+        <div class="txn-row-inline" data-txnid="${t.id}">
           <span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span>
           <span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span>
           <span class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;font-size:12px;min-width:88px;flex-shrink:0">${fmtAmt(t.amount,true)}</span>
@@ -889,7 +892,7 @@ function renderP4() {
     return { ...t, cashRun, cardRun, totalRun: cashRun+cardRun };
   });
 
-  document.getElementById('p4body').innerHTML = [...withRun].reverse().map(t => `<tr>
+  document.getElementById('p4body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
     <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
     <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
     <td><span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span></td>
@@ -982,11 +985,9 @@ function opsDeleteOp() {
   if (!opsEditId) return;
   appConfirm('Удалить операцию?').then(ok => {
     if (!ok) return;
-    // Soft delete: mark as deleted and propagate via merge
-    const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
-    if (t) { t._deleted = true; t._deletedAt = new Date().toISOString(); t._editedAt = t._deletedAt; }
-    opsSave(); opsCloseModal(); opsReRenderCurrent();
-    if (driveToken) driveDebouncedPush('ops');
+    const id = opsEditId;
+    opsCloseModal();
+    opsSoftDelete(id);   // мягкое удаление + тост «Отменить», см. блок «Корзина»
   });
 }
 
@@ -4040,8 +4041,175 @@ function qiMobileSubmit() {
 const opsMonths = getMonths();
 if (opsMonths.length) p4Month = opsMonths[opsMonths.length - 1];
 renderP1();
+opsUpdateTrashBadge();   // стартовый рендер идёт мимо opsReRenderCurrent
 
 // Inv: load sidebar + show dashboard by default
 invLoadRates();
 invRenderSidebar();
 invShowDashboard();
+
+
+/* ══════════════════════════════════════════════════
+   КОРЗИНА И ОТМЕНА УДАЛЕНИЯ
+
+   Удаление и раньше было мягким (_deleted + _deletedAt),
+   но достать запись обратно было нечем. Здесь — единая
+   точка удаления с тостом «Отменить», восстановление и
+   окончательная очистка.
+
+   Про слияние с Drive: _mergeOps выбирает версию с более
+   поздним _editedAt, поэтому и удаление, и восстановление
+   обязаны его двигать — иначе другое устройство вернёт
+   свою копию.
+══════════════════════════════════════════════════ */
+
+function opsTxnById(id) {
+  return opsState.txns.find(t => String(t.id) === String(id)) || null;
+}
+
+// Короткая подпись операции для тостов и списка корзины
+function opsTxnLabel(t) {
+  const c = (t.comment || '').trim();
+  const short = c.length > 28 ? c.slice(0, 27) + '…' : c;
+  return fmtAmt(t.amount, true) + (short ? ' · ' + short : '');
+}
+
+function opsDeletedTxns() {
+  return opsState.txns
+    .filter(t => t._deleted)
+    // id генерируется как «время + случайный хвост», поэтому годится
+    // вторым ключом, когда две записи удалены в одну миллисекунду
+    .sort((a, b) =>
+      String(b._deletedAt || '').localeCompare(String(a._deletedAt || '')) ||
+      String(b.id).localeCompare(String(a.id)));
+}
+
+/**
+ * Мягкое удаление — единственная точка. Показывает тост с отменой.
+ * @param {boolean} silent — не показывать тост (когда удаляют пачкой)
+ */
+function opsSoftDelete(id, silent) {
+  const t = opsTxnById(id);
+  if (!t || t._deleted) return false;
+  const now = new Date().toISOString();
+  t._deleted   = true;
+  t._deletedAt = now;
+  t._editedAt  = now;
+  opsSave();
+  opsReRenderCurrent();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+  if (!silent) showUndoToast('Удалено: ' + opsTxnLabel(t), () => opsRestoreTxn(id));
+  return true;
+}
+
+function opsRestoreTxn(id) {
+  const t = opsTxnById(id);
+  if (!t) { showErr('Операция не найдена'); return; }
+  t._deleted  = false;
+  t._editedAt = new Date().toISOString();   // восстановление должно выиграть при merge
+  delete t._deletedAt;
+  opsSave();
+  opsReRenderCurrent();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+  showOk('Операция восстановлена');
+}
+
+// Окончательное удаление — запись уходит из массива безвозвратно
+function opsPurgeTxn(id) {
+  const t = opsTxnById(id);
+  if (!t) return;
+  appConfirm(`Удалить навсегда «${opsTxnLabel(t)}»? Отменить будет нельзя.`).then(ok => {
+    if (!ok) return;
+    opsState.txns = opsState.txns.filter(x => String(x.id) !== String(id));
+    opsSave();
+    opsReRenderCurrent();
+    if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+    showOk('Удалено навсегда');
+  });
+}
+
+function opsPurgeAll() {
+  const n = opsDeletedTxns().length;
+  if (!n) return;
+  appConfirm(`Очистить корзину? ${n} ${opsPlural(n, 'запись', 'записи', 'записей')} будет удалено навсегда.`).then(ok => {
+    if (!ok) return;
+    opsState.txns = opsState.txns.filter(t => !t._deleted);
+    opsSave();
+    opsReRenderCurrent();
+    if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+    showOk('Корзина очищена');
+  });
+}
+
+function opsRestoreAll() {
+  const list = opsDeletedTxns();
+  if (!list.length) return;
+  const now = new Date().toISOString();
+  for (const t of list) { t._deleted = false; t._editedAt = now; delete t._deletedAt; }
+  opsSave();
+  opsReRenderCurrent();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+  showOk(`Восстановлено: ${list.length}`);
+}
+
+function opsPlural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+function opsFmtDeletedAt(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getDate()} ${MONTHS_RU_GEN[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Счётчик на пункте меню — иначе про корзину легко забыть
+function opsUpdateTrashBadge() {
+  const el = document.getElementById('nav-trash-count');
+  if (!el) return;
+  const n = opsState.txns.reduce((a, t) => a + (t._deleted ? 1 : 0), 0);
+  el.textContent = n || '';
+  el.hidden = !n;
+}
+
+/* ── Страница «Корзина» ─────────────────────────── */
+
+function renderP7() {
+  const list  = opsDeletedTxns();
+  const body  = document.getElementById('p7body');
+  const count = document.getElementById('p7count');
+  const tools = document.getElementById('p7-tools');
+  const empty = document.getElementById('p7-empty');
+  const wrap  = document.getElementById('p7-wrap');
+  if (!body) return;
+
+  if (count) count.textContent = list.length
+    ? `${list.length} ${opsPlural(list.length, 'запись', 'записи', 'записей')}`
+    : 'пусто';
+  if (tools) tools.style.display = list.length ? 'flex' : 'none';
+  if (empty) empty.style.display = list.length ? 'none' : 'block';
+  if (wrap)  wrap.style.display  = list.length ? 'block' : 'none';
+
+  body.innerHTML = list.map(t => {
+    const cat = t.cat ? opsCat(t.cat) : null;
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
+      <td><div class="txn-tags">
+        <span class="tag ${t.type === 'income' ? 'tag-income' : 'tag-expense'}">${t.type === 'income' ? '↑ Приход' : '↓ Расход'}</span>
+        <span class="tag ${t.way === 'Наличный' ? 'tag-cash' : 'tag-card'}">${t.way}</span>
+        ${cat ? `<span class="tag" style="border-color:${cat.color};color:${cat.color}">${escHtml(opsCatDisplay(cat))}</span>` : ''}
+      </div></td>
+      <td class="${t.amount >= 0 ? 'amt-pos' : 'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount, true)}</td>
+      <td style="color:var(--muted)">${escHtml(t.comment) || '—'}</td>
+      <td style="color:var(--muted2);white-space:nowrap;font-size:10px">${opsFmtDeletedAt(t._deletedAt)}</td>
+      <td style="white-space:nowrap">
+        <button class="row-edit-btn" title="Восстановить" onclick="opsRestoreTxn('${t.id}')">↺</button>
+        <button class="row-edit-btn is-danger" title="Удалить навсегда" onclick="opsPurgeTxn('${t.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
