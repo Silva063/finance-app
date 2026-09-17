@@ -481,12 +481,13 @@
       </div>
     </div>
     <div class="form-field">
-      <label>Категория</label>
-      <select id="m-cat"></select>
+      <label>Категория <span class="cat-auto-badge" id="m-cat-auto" hidden>авто</span></label>
+      <select id="m-cat" onchange="opsAcTouch()"></select>
+      <button type="button" class="cat-suggest" id="m-cat-suggest" hidden onclick="opsAcApply()"></button>
     </div>
     <div class="form-field">
       <label>Комментарий</label>
-      <input type="text" id="m-comment" placeholder="Описание операции...">
+      <input type="text" id="m-comment" placeholder="Описание операции..." oninput="opsAcOnComment()">
     </div>
 
     <!-- Составные позиции -->
@@ -992,6 +993,7 @@
 ══════════════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
 <script src="js/app.js"></script>
+<script src="js/autocat.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/snapshot.js"></script>
 <script src="js/drive.js"></script>

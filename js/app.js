@@ -120,6 +120,7 @@ function opsLoad() {
 function opsSave() {
   if (!opsState._lastModified) opsState._lastModified = new Date().toISOString();
   localStorage.setItem('finOps2026', JSON.stringify(opsState));
+  opsAcInvalidate();   // история изменилась — индекс автокатегоризации устарел
 }
 
 const OPS_DEFAULT_CATS = [
@@ -916,6 +917,7 @@ function opsOpenAddModal() {
   document.getElementById('m-amt').value     = '';
   document.getElementById('m-comment').value = '';
   opsFillCatSel('');
+  opsAcReset(false);
   opsLoadItems([], 'none');
   document.getElementById('m-del-btn').style.display = 'none';
   document.getElementById('ops-modal').classList.add('is-open');
@@ -930,6 +932,7 @@ function opsOpenEditModal(id) {
   document.getElementById('m-amt').value     = Math.abs(t.amount);
   document.getElementById('m-comment').value = t.comment || '';
   opsFillCatSel(t.cat || '');
+  opsAcReset(!!t.cat);
   opsLoadItems(t.items || [], t.itemsMode || 'none');
   document.getElementById('m-del-btn').style.display = 'block';
   document.getElementById('ops-modal').classList.add('is-open');
@@ -3974,7 +3977,7 @@ quickInputSubmit = function() {
     str = str.slice(wayM[0].length).trim();
   }
 
-  // Нечёткий поиск категории по первому слову
+  // Явное указание категории первым словом — приоритетнее автомата
   const words = str.split(/\s+/);
   if (words.length > 1) {
     const w = words[0].toLowerCase();
@@ -3985,6 +3988,13 @@ quickInputSubmit = function() {
   }
   comment = words.join(' ');
 
+  // Иначе — подбираем по истории. Слова из комментария при этом не съедаются.
+  let catAuto = false;
+  if (!cat) {
+    const guess = opsAcPredict(comment, type);
+    if (guess) { cat = guess; catAuto = true; }
+  }
+
   const date = new Date().toISOString().slice(0,10);
   const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
   opsState.txns.push({ id: opsGenId(), date, type, way, amount: finalAmount, comment, cat, _editedAt: new Date().toISOString() });
@@ -3992,7 +4002,8 @@ quickInputSubmit = function() {
   if (driveToken) driveDebouncedPush('ops');
 
   const catName = cat ? opsCats().find(c=>c.id===cat)?.name : '';
-  showHint(`✓ ${type==='income'?'+':'−'}${amount} · ${way==='Наличный'?'нал':'безнал'}${catName?' · '+catName:''}${comment?' · '+comment:''}`, 'var(--green)');
+  const catPart = catName ? ' · ' + catName + (catAuto ? ' (авто)' : '') : '';
+  showHint(`✓ ${type==='income'?'+':'−'}${amount} · ${way==='Наличный'?'нал':'безнал'}${catPart}${comment?' · '+comment:''}`, 'var(--green)');
   inp.value = '';
 };
 

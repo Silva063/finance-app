@@ -630,6 +630,37 @@ select.filter-input option { background: var(--bg2); }
   text-transform: uppercase;
 }
 .form-field { margin-bottom: 13px; }
+
+/* ── Автокатегоризация: пометка и подсказка ─────── */
+.cat-auto-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--acc-glow);
+  border: 1px solid var(--acc);
+  color: var(--acc2);
+  font-size: 7.5px;
+  letter-spacing: .1em;
+  vertical-align: middle;
+}
+.cat-auto-badge[hidden] { display: none; }
+.cat-suggest {
+  display: block;
+  margin-top: 5px;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line2);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.cat-suggest:hover { border-color: var(--acc); color: var(--acc2); background: var(--bg3); }
+.cat-suggest[hidden] { display: none; }
 .form-field label {
   display: block;
   font-size: 8.5px;
