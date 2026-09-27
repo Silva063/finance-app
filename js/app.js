@@ -3474,6 +3474,17 @@ function _invGoalReorder(fromId, toId, after) {
   if (!invCurId) invShowDashboard();
 }
 
+// Перерисовка целей после слияния с Drive. Без неё синк сообщает
+// «синхронизировано», а на экране остаётся старая цель до перезагрузки страницы.
+function invRefreshGoalsUI() {
+  const modal = document.getElementById('inv-goals-modal');
+  if (modal && modal.classList.contains('is-open') && document.getElementById('inv-goals-list')) {
+    invRenderGoalsList();
+  }
+  // блок целей встроен в дашборд, поэтому пересобираем его целиком
+  if (!invCurId && typeof invShowDashboard === 'function') invShowDashboard();
+}
+
 function invRenderGoalsList() {
   const goals = invGoals();
   const el = document.getElementById('inv-goals-list');

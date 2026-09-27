@@ -470,7 +470,7 @@ function driveDebouncedPush(app) {
         syncLog('↑ Финучёт: синхронизировано с Drive', 'ok');
       } else {
         const remote = await driveDownloadFile('inv').catch(() => null);
-        if (remote && remote.dates) {
+        if (remote) {
           const merged = _mergeInv(invState, remote);
           const added  = merged.dates.length - (invState.dates || []).length;
           invState = merged;
@@ -479,6 +479,7 @@ function driveDebouncedPush(app) {
           if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
           invRenderSidebar();
           if (invCurId) invRenderCurrent();
+          invRefreshGoalsUI();
           if (added > 0) syncLog(`⇄ Инвентаризация: подтянуто ${added} записей с Drive`, 'ok');
         } else {
           invState._lastModified = new Date().toISOString();
@@ -542,6 +543,7 @@ async function _syncOne(key, label) {
     if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
     invRenderSidebar();
     if (invCurId) invRenderCurrent();
+    invRefreshGoalsUI();
     await driveUploadFile(fname, invState);
     syncLog(`⇄ ${label}: merge завершён (+${delta} с Drive), загружено`, 'ok');
   }
@@ -615,7 +617,7 @@ async function drivePullAll() {
     } else { syncLog('Финучёт: файл на Drive не найден', 'warn'); }
     if (driveFileMeta.inv) {
       const d = await driveDownloadFile('inv');
-      if (d) { invState = d; invSaveState(); invLoadRates(); invCurId = null; invRenderSidebar(); syncLog('↓ Инвентаризация: получено с Drive', 'ok'); }
+      if (d) { invState = d; invSaveState(); invLoadRates(); invCurId = null; invRenderSidebar(); invRefreshGoalsUI(); syncLog('↓ Инвентаризация: получено с Drive', 'ok'); }
     } else { syncLog('Инвентаризация: файл на Drive не найден', 'warn'); }
     driveSetStatus('ok', 'Drive ✓');
     _driveUpdateFileMeta();
@@ -702,10 +704,14 @@ async function _driveStartupSync() {
             const before = opsState.txns.filter(t => !t._deleted).length;
             const merged = _mergeOps(opsState, remoteData);
             const after  = merged.txns.filter(t => !t._deleted).length;
-            if (after !== before || merged.txns.length !== opsState.txns.length) {
-              opsState = merged;
-              opsSave();
-              opsReRenderCurrent();
+            // Результат слияния применяем ВСЕГДА. Раньше он отбрасывался, если не менялось
+            // число операций, и дальше на Drive уезжало несмерженное состояние — правки
+            // настроек (категории, шаблоны) с другого устройства при этом терялись.
+            const opsChanged = after !== before || merged.txns.length !== opsState.txns.length;
+            opsState = merged;
+            opsSave();
+            opsReRenderCurrent();
+            if (opsChanged) {
               mergedAnything = true;
               syncLog(`⇄ Финучёт: подтянуто с Drive при старте (+${Math.max(0, after - before)})`, 'ok');
             }
@@ -723,17 +729,22 @@ async function _driveStartupSync() {
           { headers: { Authorization: 'Bearer ' + driveToken } });
         if (remote.ok) {
           const remoteData = await remote.json();
-          if (remoteData && remoteData.dates) {
+          if (remoteData) {
             const before = (invState.dates || []).filter(r => !r._deleted).length;
             const merged = _mergeInv(invState, remoteData);
             const after  = merged.dates.filter(r => !r._deleted).length;
-            if (after !== before || merged.dates.length !== (invState.dates || []).length) {
-              invState = merged;
-              invSaveState();
-              invLoadRates();
-              if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
-              invRenderSidebar();
-              if (invCurId) invRenderCurrent();
+            // Главная причина «цель не синхронизируется»: правка цели не меняет число
+            // записей дат, условие было ложным, merged выбрасывался — и следующей строкой
+            // на Drive уезжало старое локальное состояние, затирая правку с другого устройства.
+            const invChanged = after !== before || merged.dates.length !== (invState.dates || []).length;
+            invState = merged;
+            invSaveState();
+            invLoadRates();
+            if (invCurId && !invState.dates.find(r=>r.id===invCurId&&!r._deleted)) invCurId=null;
+            invRenderSidebar();
+            if (invCurId) invRenderCurrent();
+            invRefreshGoalsUI();
+            if (invChanged) {
               mergedAnything = true;
               syncLog(`⇄ Инвентаризация: подтянуто с Drive при старте (+${Math.max(0, after - before)})`, 'ok');
             }
