@@ -3025,6 +3025,23 @@ function invRenderDiff() {
 ══════════════════════════════════════════════════ */
 
 function invGoals() { return invState.goals || []; }
+function invGoalsPurged(state) {
+  const st = state || invState;
+  return Array.isArray(st.goalsPurged) ? st.goalsPurged : [];
+}
+// Цели сливаются по id, поэтому удаление обязано оставлять надгробие —
+// иначе объединение вернёт цель с устройства, которое о удалении не знает.
+function invAddGoalTombstones(ids) {
+  const now  = new Date().toISOString();
+  const list = invGoalsPurged().slice();
+  const have = new Set(list.map(x => String(x.id)));
+  for (const id of ids) {
+    const key = String(id);
+    if (!have.has(key)) { list.push({ id: key, at: now }); have.add(key); }
+  }
+  const cutoff = Date.now() - SYNC_TOMBSTONE_TTL_DAYS * 86400000;
+  invState.goalsPurged = list.filter(x => new Date(x.at || 0).getTime() >= cutoff);
+}
 
 const GOAL_SWATCHES = [
   { label:'Акцент',  value:'var(--acc)',   dynamic: true },
@@ -3151,11 +3168,13 @@ function invSaveGoal() {
   });
   const blocks = checkedIds.length === allSecIds.length ? [] : checkedIds;
   if (!invState.goals) invState.goals = [];
+  const now = new Date().toISOString();
   if (editId) {
     const g = invState.goals.find(g => g.id === editId);
-    if (g) Object.assign(g, { name, amount, currency: cur, color, blocks });
+    // _editedAt обязателен: по нему merge выбирает, чья версия цели свежее
+    if (g) Object.assign(g, { name, amount, currency: cur, color, blocks, _editedAt: now });
   } else {
-    invState.goals.push({ id: 'g_' + Date.now(), name, amount, currency: cur, color, blocks });
+    invState.goals.push({ id: 'g_' + Date.now(), name, amount, currency: cur, color, blocks, _editedAt: now });
   }
   invSaveState();
   if (driveToken) driveDebouncedPush('inv');
@@ -3194,6 +3213,7 @@ function invCancelEditGoal() {
 function invDeleteGoal(id) {
   appConfirm('Удалить цель?').then(ok => {
     if (!ok) return;
+    invAddGoalTombstones([id]);
     invState.goals = invGoals().filter(g => g.id !== id);
     invSaveState();
     if (driveToken) driveDebouncedPush('inv');
@@ -4171,7 +4191,7 @@ function opsFmtDeletedAt(iso) {
 
 // Сколько держим надгробия. Устройство, не синхронизировавшееся дольше,
 // сможет вернуть запись — зато список не растёт бесконечно.
-const OPS_PURGE_TTL_DAYS = 90;
+const SYNC_TOMBSTONE_TTL_DAYS = 90;
 
 function opsPurgedList(state) {
   const st = state || opsState;
@@ -4189,7 +4209,7 @@ function opsAddTombstones(ids) {
     if (!have.has(key)) { list.push({ id: key, at: now }); have.add(key); }
   }
   // попутно отбрасываем просроченные
-  const cutoff = Date.now() - OPS_PURGE_TTL_DAYS * 86400000;
+  const cutoff = Date.now() - SYNC_TOMBSTONE_TTL_DAYS * 86400000;
   opsState.purged = list.filter(x => new Date(x.at || 0).getTime() >= cutoff);
 }
 

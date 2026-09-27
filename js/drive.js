@@ -300,6 +300,43 @@ function invTouch() { invState._lastModified = new Date().toISOString(); invSave
  * Merge two ops states. Returns new merged state.
  * Never drops a transaction that exists on either side.
  */
+/**
+ * Объединяет две коллекции по id: при конфликте побеждает более
+ * поздняя правка, а перечисленное в надгробиях выбрасывается совсем.
+ * Общий механизм для операций, записей инвентаризации и целей — чтобы
+ * правила разрешения конфликтов не расходились по трём местам.
+ */
+function _mergeById(localArr, remoteArr, opts) {
+  const o      = opts || {};
+  const tsOf   = o.tsOf || (x => x._editedAt || 0);
+  const ttl    = typeof SYNC_TOMBSTONE_TTL_DAYS !== 'undefined' ? SYNC_TOMBSTONE_TTL_DAYS : 90;
+  const cutoff = Date.now() - ttl * 86400000;
+
+  // надгробия с двух сторон, просроченные отбрасываем
+  const tombs = new Map();
+  for (const tb of [...(o.remoteTombs || []), ...(o.localTombs || [])]) {
+    if (!tb || tb.id === undefined || tb.id === null) continue;
+    const at = tb.at || new Date(0).toISOString();
+    if (new Date(at).getTime() < cutoff) continue;
+    const key = String(tb.id), prev = tombs.get(key);
+    if (!prev || at < prev) tombs.set(key, at);   // держим самую раннюю метку
+  }
+
+  // сначала remote, потом local — при равных метках результат сходится к облачной версии
+  const map = new Map();
+  for (const it of [...(remoteArr || []), ...(localArr || [])]) {
+    if (!it || it.id === undefined || it.id === null) continue;
+    const key = String(it.id);
+    if (!map.has(key)) { map.set(key, it); continue; }
+    if (new Date(tsOf(it)).getTime() > new Date(tsOf(map.get(key))).getTime()) map.set(key, it);
+  }
+
+  return {
+    items:  [...map.values()].filter(x => !tombs.has(String(x.id))),
+    purged: [...tombs].map(([id, at]) => ({ id, at }))
+  };
+}
+
 function _mergeOps(local, remote) {
   // Pick "settings carrier" — whichever side is newer
   const localTs  = new Date(local._lastModified  || 0).getTime();
@@ -315,42 +352,17 @@ function _mergeOps(local, remote) {
   // Надгробия: записи, удалённые окончательно, не должны возвращаться с Drive.
   // Без этого очистка корзины отменяется сама: driveDebouncedPush сначала
   // сливается с удалённым файлом, а там удалённые всё ещё лежат.
-  const ttlDays = typeof OPS_PURGE_TTL_DAYS !== 'undefined' ? OPS_PURGE_TTL_DAYS : 90;
-  const cutoff  = Date.now() - ttlDays * 86400000;
-  const tombs   = new Map();
-  for (const tb of [...(remote.purged || []), ...(local.purged || [])]) {
-    if (!tb || tb.id === undefined || tb.id === null) continue;
-    const at = tb.at || new Date(0).toISOString();
-    if (new Date(at).getTime() < cutoff) continue;     // просроченные чистим, иначе список растёт вечно
-    const key  = String(tb.id);
-    const prev = tombs.get(key);
-    if (!prev || at < prev) tombs.set(key, at);        // держим самую раннюю метку
-  }
-  console.log(`[merge-ops] tombstones:${tombs.size}`);
-
-  // Build id→txn map, merge
-  const map = new Map();
-  // Remote first, then local — local wins on equal timestamp
-  const allTxns = [...remoteTxns, ...localTxns];
-  for (const t of allTxns) {
-    const key = String(t.id);
-    if (!map.has(key)) {
-      map.set(key, t);
-    } else {
-      // Conflict on same id: pick newer _editedAt, else keep existing (local wins)
-      const existing = map.get(key);
-      const existingTs = new Date(existing._editedAt || existing.date || 0).getTime();
-      const incomingTs = new Date(t._editedAt        || t.date        || 0).getTime();
-      if (incomingTs > existingTs) map.set(key, t);
-    }
-  }
+  const txnRes = _mergeById(localTxns, remoteTxns, {
+    tsOf: t => t._editedAt || t.date || 0,
+    localTombs:  local.purged,
+    remoteTombs: remote.purged
+  });
+  console.log(`[merge-ops] tombstones:${txnRes.purged.length}`);
 
   // Sort by date desc, then by id string desc (stable order)
-  const merged = [...map.values()]
-    .filter(t => !tombs.has(String(t.id)))
-    .sort((a, b) =>
-      b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
-    );
+  const merged = txnRes.items.sort((a, b) =>
+    b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
+  );
 
   // nextId kept for backward compat with old numeric ids
   const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
@@ -366,7 +378,7 @@ function _mergeOps(local, remote) {
     nextId: nextId,
     // объединённый список надгробий уезжает обратно на Drive —
     // так о окончательном удалении узнают остальные устройства
-    purged: [...tombs].map(([id, at]) => ({ id, at })),
+    purged: txnRes.purged,
     _lastModified: new Date().toISOString(),
   };
 }
@@ -402,9 +414,22 @@ function _mergeInv(local, remote) {
     (b.date || '').localeCompare(a.date || '')
   );
 
+  // Цели раньше ездили целиком вместе с settingsSrc — то есть побеждала
+  // целиком та сторона, чей _lastModified свежее. А _lastModified двигается
+  // каждым сохранением и каждым синком, поэтому правка цели на одном
+  // устройстве терялась, как только второе успевало синхронизироваться.
+  // Теперь цели сливаются по id по своей метке _editedAt, как и остальные сущности.
+  const goalRes = _mergeById(local.goals, remote.goals, {
+    localTombs:  local.goalsPurged,
+    remoteTombs: remote.goalsPurged
+  });
+  console.log(`[merge-inv] goals:${goalRes.items.length} tombstones:${goalRes.purged.length}`);
+
   return {
     ...settingsSrc,
     dates: merged,
+    goals: goalRes.items,
+    goalsPurged: goalRes.purged,
     _lastModified: new Date().toISOString(),
   };
 }
