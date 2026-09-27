@@ -4120,6 +4120,7 @@ function opsPurgeTxn(id) {
   if (!t) return;
   appConfirm(`Удалить навсегда «${opsTxnLabel(t)}»? Отменить будет нельзя.`).then(ok => {
     if (!ok) return;
+    opsAddTombstones([id]);
     opsState.txns = opsState.txns.filter(x => String(x.id) !== String(id));
     opsSave();
     opsReRenderCurrent();
@@ -4133,6 +4134,7 @@ function opsPurgeAll() {
   if (!n) return;
   appConfirm(`Очистить корзину? ${n} ${opsPlural(n, 'запись', 'записи', 'записей')} будет удалено навсегда.`).then(ok => {
     if (!ok) return;
+    opsAddTombstones(opsState.txns.filter(t => t._deleted).map(t => t.id));
     opsState.txns = opsState.txns.filter(t => !t._deleted);
     opsSave();
     opsReRenderCurrent();
@@ -4165,6 +4167,30 @@ function opsFmtDeletedAt(iso) {
   if (isNaN(d)) return '—';
   const pad = n => String(n).padStart(2, '0');
   return `${d.getDate()} ${MONTHS_RU_GEN[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Сколько держим надгробия. Устройство, не синхронизировавшееся дольше,
+// сможет вернуть запись — зато список не растёт бесконечно.
+const OPS_PURGE_TTL_DAYS = 90;
+
+function opsPurgedList(state) {
+  const st = state || opsState;
+  return Array.isArray(st.purged) ? st.purged : [];
+}
+
+// Надгробие — единственный способ, которым окончательное удаление
+// переживает слияние с Drive: merge выбрасывает всё, что здесь перечислено.
+function opsAddTombstones(ids) {
+  const now  = new Date().toISOString();
+  const list = opsPurgedList().slice();
+  const have = new Set(list.map(x => String(x.id)));
+  for (const id of ids) {
+    const key = String(id);
+    if (!have.has(key)) { list.push({ id: key, at: now }); have.add(key); }
+  }
+  // попутно отбрасываем просроченные
+  const cutoff = Date.now() - OPS_PURGE_TTL_DAYS * 86400000;
+  opsState.purged = list.filter(x => new Date(x.at || 0).getTime() >= cutoff);
 }
 
 // Счётчик на пункте меню — иначе про корзину легко забыть

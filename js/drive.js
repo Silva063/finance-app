@@ -312,6 +312,22 @@ function _mergeOps(local, remote) {
   console.log(`[merge-ops] local ids:`,  localTxns.map(t => String(t.id)));
   console.log(`[merge-ops] remote ids:`, remoteTxns.map(t => String(t.id)));
 
+  // Надгробия: записи, удалённые окончательно, не должны возвращаться с Drive.
+  // Без этого очистка корзины отменяется сама: driveDebouncedPush сначала
+  // сливается с удалённым файлом, а там удалённые всё ещё лежат.
+  const ttlDays = typeof OPS_PURGE_TTL_DAYS !== 'undefined' ? OPS_PURGE_TTL_DAYS : 90;
+  const cutoff  = Date.now() - ttlDays * 86400000;
+  const tombs   = new Map();
+  for (const tb of [...(remote.purged || []), ...(local.purged || [])]) {
+    if (!tb || tb.id === undefined || tb.id === null) continue;
+    const at = tb.at || new Date(0).toISOString();
+    if (new Date(at).getTime() < cutoff) continue;     // просроченные чистим, иначе список растёт вечно
+    const key  = String(tb.id);
+    const prev = tombs.get(key);
+    if (!prev || at < prev) tombs.set(key, at);        // держим самую раннюю метку
+  }
+  console.log(`[merge-ops] tombstones:${tombs.size}`);
+
   // Build id→txn map, merge
   const map = new Map();
   // Remote first, then local — local wins on equal timestamp
@@ -330,9 +346,11 @@ function _mergeOps(local, remote) {
   }
 
   // Sort by date desc, then by id string desc (stable order)
-  const merged = [...map.values()].sort((a, b) =>
-    b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
-  );
+  const merged = [...map.values()]
+    .filter(t => !tombs.has(String(t.id)))
+    .sort((a, b) =>
+      b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
+    );
 
   // nextId kept for backward compat with old numeric ids
   const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
@@ -346,6 +364,9 @@ function _mergeOps(local, remote) {
     ...settingsSrc,
     txns:   merged,
     nextId: nextId,
+    // объединённый список надгробий уезжает обратно на Drive —
+    // так о окончательном удалении узнают остальные устройства
+    purged: [...tombs].map(([id, at]) => ({ id, at })),
     _lastModified: new Date().toISOString(),
   };
 }
