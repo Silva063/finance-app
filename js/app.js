@@ -4073,16 +4073,24 @@ function qiMobileSubmit() {
 /* ══════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════ */
-// Ops: determine default month
-const opsMonths = getMonths();
-if (opsMonths.length) p4Month = opsMonths[opsMonths.length - 1];
-renderP1();
-opsUpdateTrashBadge();   // стартовый рендер идёт мимо opsReRenderCurrent
+// Инициализацию запускаем на DOMContentLoaded, а не сразу.
+// Причина: renderP1 обращается к opsBudgetRenderP1 из budget.js, который
+// подключается ПОСЛЕ app.js. При немедленном вызове это ReferenceError,
+// он обрывал выполнение app.js — и дальше не инициализировались ни
+// константы (SYNC_TOMBSTONE_TTL_DAYS уходила в TDZ и роняла синхронизацию),
+// ни блок инвентаря. К DOMContentLoaded все модули уже загружены.
+document.addEventListener('DOMContentLoaded', () => {
+  // Ops: determine default month
+  const opsMonths = getMonths();
+  if (opsMonths.length) p4Month = opsMonths[opsMonths.length - 1];
+  renderP1();
+  opsUpdateTrashBadge();   // стартовый рендер идёт мимо opsReRenderCurrent
 
-// Inv: load sidebar + show dashboard by default
-invLoadRates();
-invRenderSidebar();
-invShowDashboard();
+  // Inv: load sidebar + show dashboard by default
+  invLoadRates();
+  invRenderSidebar();
+  invShowDashboard();
+});
 
 
 /* ══════════════════════════════════════════════════
