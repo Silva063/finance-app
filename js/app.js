@@ -302,6 +302,7 @@ function renderP1() {
     <div class="stat-card"><div class="stat-card-label">Безнал / Нал итог</div><div class="stat-card-value is-neu" style="font-size:13px">${fmtAmt(s.cardNet,true)}</div><div class="stat-card-sub">Нал: ${fmtAmt(s.cashNet,true)}</div></div>`;
 
   document.getElementById('p1count').textContent = `${txns.length} операций`;
+  opsBudgetRenderP1();
 
   const hasCat = txns.some(t => !!t.cat);
 
@@ -831,6 +832,7 @@ function renderP3() {
         </div>
       </div>
       <div class="month-body">
+        ${opsBudgetBarHTML(m, true)}
         ${dayRows}
         <div class="month-summary">
           <span style="color:var(--muted2)">${monthLabel(m)} —</span>
@@ -883,6 +885,7 @@ function renderP4() {
     <div class="stat-card"><div class="stat-card-label">Безнал / Нал</div><div class="stat-card-value is-neu" style="font-size:13px">${fmtAmt(s.cardNet,true)}</div><div class="stat-card-sub">Нал: ${fmtAmt(s.cashNet,true)}</div></div>
     <div class="stat-card"><div class="stat-card-label">Итог месяца</div><div class="stat-card-value ${s.net>=0?'is-pos':'is-neg'}">${fmtAmt(s.net,true)}</div><div class="stat-card-sub">${txns.length} операций</div></div>`;
 
+  opsBudgetRenderP4(p4Month);
   document.getElementById('p4count').textContent = `${txns.length} операций за ${label}`;
 
   const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
@@ -963,6 +966,8 @@ function opsSaveOp() {
   }
   opsSave(); opsCloseModal(); opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
+
+  opsBudgetWarnAfterSave(date, type);
 
   // Limit check: warn if category limit reached or exceeded
   if (cat && type === 'expense') {

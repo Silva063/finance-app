@@ -364,6 +364,20 @@ function _mergeOps(local, remote) {
     b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))
   );
 
+  // Настройки бюджета нельзя везти внутри settingsSrc: там побеждает сторона
+  // со свежим _lastModified, а его двигает любой синк — именно так
+  // терялись цели. Скаляры берём по собственной метке бюджета,
+  // а переопределения по месяцам — по id, тем же _mergeById.
+  let budget;
+  const lb = local.budget, rb = remote.budget;
+  if (lb || rb) {
+    const lt = new Date((lb && lb._editedAt) || 0).getTime();
+    const rt = new Date((rb && rb._editedAt) || 0).getTime();
+    const base = lt >= rt ? (lb || rb) : (rb || lb);
+    const monthRes = _mergeById((lb && lb.months) || [], (rb && rb.months) || []);
+    budget = { ...base, months: monthRes.items };
+  }
+
   // nextId kept for backward compat with old numeric ids
   const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
   const nextId = Math.max(
@@ -379,6 +393,7 @@ function _mergeOps(local, remote) {
     // объединённый список надгробий уезжает обратно на Drive —
     // так о окончательном удалении узнают остальные устройства
     purged: txnRes.purged,
+    ...(budget ? { budget } : {}),
     _lastModified: new Date().toISOString(),
   };
 }

@@ -163,6 +163,7 @@
       </div>
       <button class="btn btn-full btn-sm" onclick="snapOpenModal();closeSidebar()">◈ Архив снапшотов</button>
       <button class="btn btn-full btn-sm" onclick="opsTplOpenModal();closeSidebar()">◩ Шаблоны</button>
+      <button class="btn btn-full btn-sm" onclick="opsBudgetOpenModal();closeSidebar()">◎ Лимит месяца</button>
     </div>
   </aside>
 
@@ -173,6 +174,7 @@
       <div class="page-title">Все операции</div>
       <div class="page-sub">Наличные и безналичные движения в руб ПМР</div>
       <div class="stat-grid stat-grid-4" id="p1stats"></div>
+      <div id="p1-budget"></div>
       <div class="chart-block" id="c1-block">
         <div class="chart-block-header">
           <div class="chart-block-title">Доходы и расходы по месяцам</div>
@@ -401,6 +403,7 @@
         <select class="filter-input" id="p4monthsel" onchange="p4MonthChange()"></select>
       </div>
       <div class="stat-grid stat-grid-4" id="p4stats"></div>
+      <div id="p4-budget"></div>
       <div class="tbl-wrap">
         <div class="tbl-header"><div class="tbl-caption" id="p4count">—</div></div>
         <table>
@@ -995,6 +998,16 @@
 <!-- ══════════════════════════════════════════════
      MODAL: ШАБЛОНЫ ОПЕРАЦИЙ
 ══════════════════════════════════════════════ -->
+<div class="overlay" id="budget-modal">
+  <div class="modal" style="width:460px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
+    <div class="modal-title">◎ Лимит затрат на месяц</div>
+    <div id="budget-fields" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="modal-actions" style="margin-top:14px;flex-shrink:0;">
+      <button class="btn" onclick="opsBudgetCloseModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="tpl-modal">
   <div class="modal" style="width:460px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
     <div class="modal-title">◩ Шаблоны операций</div>
@@ -1024,6 +1037,7 @@
 <script src="js/app.js"></script>
 <script src="js/autocat.js"></script>
 <script src="js/swipe.js"></script>
+<script src="js/budget.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/snapshot.js"></script>
 <script src="js/drive.js"></script>
