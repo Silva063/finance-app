@@ -488,8 +488,13 @@
     </div>
     <div class="form-row">
       <div class="form-field">
-        <label>Дата</label>
-        <input type="date" id="m-date">
+        <label>Дата
+          <span class="date-chips">
+            <button type="button" class="date-chip" id="m-date-today"     onclick="opsSetDateOffset(0)">сегодня</button>
+            <button type="button" class="date-chip" id="m-date-yesterday" onclick="opsSetDateOffset(-1)">вчера</button>
+          </span>
+        </label>
+        <input type="date" id="m-date" onchange="opsDateChipsSync()">
       </div>
       <div class="form-field">
         <label>Тип</label>
@@ -569,6 +574,8 @@
     <div class="modal-actions">
       <button class="btn btn-danger modal-actions-left" id="m-del-btn" style="display:none" onclick="opsDeleteOp()">Удалить</button>
       <button class="btn" onclick="opsCloseModal()">Отмена</button>
+      <button class="btn" id="m-save-more-btn" onclick="opsSaveOp(true)"
+              title="Сохранить и оставить форму открытой для следующей операции">+ И ещё</button>
       <button class="btn btn-primary" onclick="opsSaveOp()">Сохранить</button>
     </div>
   </div>
@@ -1054,6 +1061,7 @@
 <script src="js/swipe.js"></script>
 <script src="js/budget.js"></script>
 <script src="js/recurring.js"></script>
+<script src="js/inputaid.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/snapshot.js"></script>
 <script src="js/drive.js"></script>

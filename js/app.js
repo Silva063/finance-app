@@ -274,6 +274,9 @@ function opsNav(id) {
   if (id === 'op-p4') renderP4();
   if (id === 'op-p6') renderP6();
   if (id === 'op-p7') renderP7();
+  // Списки годов и месяцев собираются во время рендера, поэтому сохранённые
+  // фильтры применяем после него — и только если что-то изменилось, перерисуем.
+  if (typeof opsFiltersApply === 'function' && opsFiltersApply(id)) opsReRenderCurrent();
 }
 function opsReRenderCurrent() {
   if (opsCurPage === 'op-p1') renderP1();
@@ -304,6 +307,7 @@ function fillMonthSel(id, yearId) {
 }
 
 function opsResetP1() {
+  if (typeof opsFiltersForget === 'function') opsFiltersForget();
   ['f1search','f1type','f1way','f1year','f1month','f1cat'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -346,9 +350,9 @@ function renderP1() {
 
   const s = calcSummary(txns);
   document.getElementById('p1stats').innerHTML = `
-    <div class="stat-card"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.income)}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='income').length} операций</div></div>
-    <div class="stat-card"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.expense))}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='expense').length} операций</div></div>
-    <div class="stat-card"><div class="stat-card-label">Итог</div><div class="stat-card-value ${s.net>=0?'is-pos':'is-neg'}">${fmtAmt(s.net,true)}</div><div class="stat-card-sub">${txns.length} всего</div></div>
+    <div class="stat-card is-clickable ${type==='income'?'is-active':''}" onclick="opsStatFilterType('income')" title="Показать только приходы"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.income)}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='income').length} операций</div></div>
+    <div class="stat-card is-clickable ${type==='expense'?'is-active':''}" onclick="opsStatFilterType('expense')" title="Показать только расходы"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.expense))}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='expense').length} операций</div></div>
+    <div class="stat-card is-clickable ${!type?'is-active':''}" onclick="opsStatFilterType('')" title="Показать все типы"><div class="stat-card-label">Итог</div><div class="stat-card-value ${s.net>=0?'is-pos':'is-neg'}">${fmtAmt(s.net,true)}</div><div class="stat-card-sub">${txns.length} всего</div></div>
     <div class="stat-card"><div class="stat-card-label">Безнал / Нал итог</div><div class="stat-card-value is-neu" style="font-size:13px">${fmtAmt(s.cardNet,true)}</div><div class="stat-card-sub">Нал: ${fmtAmt(s.cashNet,true)}</div></div>`;
 
   document.getElementById('p1count').textContent = `${txns.length} операций`;
@@ -969,7 +973,8 @@ function opsFillCatSel(selectedId) {
 function opsOpenAddModal() {
   opsEditId = null;
   document.getElementById('ops-modal-title').textContent = 'Новая операция';
-  document.getElementById('m-date').value    = new Date().toISOString().slice(0,10);
+  document.getElementById('m-date').value    = (typeof opsLocalDate === 'function')
+    ? opsLocalDate(0) : new Date().toISOString().slice(0,10);
   document.getElementById('m-type').value    = 'expense';
   document.getElementById('m-way').value     = 'Безналичный';
   document.getElementById('m-amt').value     = '';
@@ -978,6 +983,9 @@ function opsOpenAddModal() {
   opsAcReset(false);
   opsLoadItems([], 'none');
   document.getElementById('m-del-btn').style.display = 'none';
+  const moreBtn = document.getElementById('m-save-more-btn');
+  if (moreBtn) moreBtn.style.display = '';
+  if (typeof opsDateChipsSync === 'function') opsDateChipsSync();
   document.getElementById('ops-modal').classList.add('is-open');
 }
 function opsOpenEditModal(id) {
@@ -993,12 +1001,16 @@ function opsOpenEditModal(id) {
   opsAcReset(!!t.cat);
   opsLoadItems(t.items || [], t.itemsMode || 'none');
   document.getElementById('m-del-btn').style.display = 'block';
+  const moreBtnE = document.getElementById('m-save-more-btn');
+  if (moreBtnE) moreBtnE.style.display = 'none';   // при правке «и ещё» не нужно
+  if (typeof opsDateChipsSync === 'function') opsDateChipsSync();
   document.getElementById('ops-modal').classList.add('is-open');
 }
 function opsCloseModal() {
   document.getElementById('ops-modal').classList.remove('is-open');
 }
-function opsSaveOp() {
+// keepOpen=true — «Сохранить и ещё»: форма остаётся открытой для следующей операции
+function opsSaveOp(keepOpen) {
   const date    = document.getElementById('m-date').value;   if (!date) return;
   const type    = document.getElementById('m-type').value;
   const way     = document.getElementById('m-way').value;
@@ -1019,7 +1031,9 @@ function opsSaveOp() {
   } else {
     opsState.txns.push({ id: opsGenId(), date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
   }
-  opsSave(); opsCloseModal(); opsReRenderCurrent();
+  opsSave();
+  if (keepOpen) opsPrepareNextOp(); else opsCloseModal();
+  opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
 
   opsBudgetWarnAfterSave(date, type);
@@ -1041,6 +1055,21 @@ function opsSaveOp() {
     }
   }
 }
+// Чистим то, что меняется от операции к операции, и оставляем то, что обычно
+// повторяется: дату, тип, способ и категорию.
+function opsPrepareNextOp() {
+  opsEditId = null;
+  document.getElementById('ops-modal-title').textContent = 'Новая операция';
+  document.getElementById('m-del-btn').style.display = 'none';
+  const more = document.getElementById('m-save-more-btn');
+  if (more) more.style.display = '';
+  document.getElementById('m-amt').value = '';
+  document.getElementById('m-comment').value = '';
+  opsLoadItems([], 'none');
+  if (typeof opsAcReset === 'function') opsAcReset(!!document.getElementById('m-cat').value);
+  document.getElementById('m-amt').focus();
+}
+
 function opsDeleteOp() {
   if (!opsEditId) return;
   appConfirm('Удалить операцию?').then(ok => {
@@ -4380,6 +4409,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const opsMonths = getMonths();
   if (opsMonths.length) p4Month = opsMonths[opsMonths.length - 1];
   renderP1();
+  if (typeof opsFiltersApply === 'function' && opsFiltersApply('op-p1')) renderP1();
   opsUpdateTrashBadge();   // стартовый рендер идёт мимо opsReRenderCurrent
 
   // Inv: load sidebar + show dashboard by default
