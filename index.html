@@ -489,11 +489,7 @@
     <div class="form-row">
       <div class="form-field">
         <label>Дата</label>
-        <input type="date" id="m-date" onchange="opsDateChipsSync()">
-        <div class="date-chips">
-          <button type="button" class="date-chip" id="m-date-today"     onclick="opsSetDateOffset(0)">сегодня</button>
-          <button type="button" class="date-chip" id="m-date-yesterday" onclick="opsSetDateOffset(-1)">вчера</button>
-        </div>
+        <input type="date" id="m-date">
       </div>
       <div class="form-field">
         <label>Тип</label>
@@ -572,10 +568,10 @@
 
     <div class="modal-actions">
       <button class="btn btn-danger modal-actions-left" id="m-del-btn" style="display:none" onclick="opsDeleteOp()">Удалить</button>
-      <button class="btn" onclick="opsCloseModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="opsSaveOp()">Сохранить и закрыть</button>
       <button class="btn" id="m-save-more-btn" onclick="opsSaveOp(true)"
               title="Сохранить и оставить форму открытой для следующей операции">Сохранить и добавить</button>
-      <button class="btn btn-primary" onclick="opsSaveOp()">Сохранить</button>
+      <button class="btn" onclick="opsCloseModal()">Отмена</button>
     </div>
   </div>
 </div>

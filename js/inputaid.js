@@ -4,39 +4,20 @@
    - фильтры переживают обновление страницы (sessionStorage:
      F5 сохраняет, закрытие браузера — сбрасывает, поэтому
      никакой настройки не нужно);
-   - кнопки «Сегодня / Вчера» у поля даты;
-   - «Сохранить и ещё» — ввод нескольких операций подряд.
+   - «Сохранить и добавить» — ввод нескольких операций подряд;
+   - дата по местному календарю вместо UTC.
 ══════════════════════════════════════════════════ */
 
 /* ── Локальная дата ─────────────────────────────── */
 // Везде в проекте дата берётся как new Date().toISOString().slice(0,10) —
 // это UTC, и после полуночи по местному времени он отдаёт вчерашнее число.
-// Для кнопок «Сегодня/Вчера» это было бы прямо заметно, поэтому считаем
-// по местному календарю.
+// Операция, введённая в час ночи, получала вчерашнюю дату, поэтому для
+// подстановки в форму считаем по местному календарю.
 function opsLocalDate(offsetDays) {
   const d = new Date();
   if (offsetDays) d.setDate(d.getDate() + offsetDays);
   const p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-}
-
-function opsSetDateOffset(offsetDays) {
-  const el = document.getElementById('m-date');
-  if (!el) return;
-  el.value = opsLocalDate(offsetDays);
-  opsDateChipsSync();
-}
-
-// Подсветка активной кнопки, если дата совпадает с сегодня/вчера
-function opsDateChipsSync() {
-  const el = document.getElementById('m-date');
-  if (!el) return;
-  const v = el.value;
-  const map = { 'm-date-today': opsLocalDate(0), 'm-date-yesterday': opsLocalDate(-1) };
-  for (const id in map) {
-    const b = document.getElementById(id);
-    if (b) b.classList.toggle('is-active', !!v && v === map[id]);
-  }
 }
 
 /* ── Сохранение фильтров на время сессии ────────── */

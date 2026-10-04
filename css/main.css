@@ -632,24 +632,6 @@ select.filter-input option { background: var(--bg2); }
 .form-field { margin-bottom: 13px; }
 
 /* ── Мелочи ввода: чипы даты, кликабельные карточки ── */
-/* Отдельной строкой под полем даты: внутри <label> подпись становилась
-   выше соседней и ломала выравнивание колонок в .form-row */
-.date-chips { display: flex; gap: 4px; margin-top: 5px; }
-.date-chip {
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line2);
-  background: transparent;
-  color: var(--muted2);
-  font-family: var(--mono);
-  font-size: 9px;
-  cursor: pointer;
-  transition: all .12s;
-  -webkit-tap-highlight-color: transparent;
-}
-.date-chip:hover { background: var(--bg3); color: var(--text); }
-.date-chip.is-active { background: var(--acc-glow); border-color: var(--acc); color: var(--acc2); }
-
 .stat-card.is-clickable {
   cursor: pointer;
   transition: border-color .12s, background .12s, transform .08s;
@@ -660,9 +642,12 @@ select.filter-input option { background: var(--bg2); }
 .stat-card.is-clickable.is-active { border-color: var(--acc); background: var(--acc-glow); }
 
 @media (max-width: 1024px) {
-  .date-chip { padding: 4px 9px; font-size: 10px; }
-  .modal-actions { flex-wrap: wrap; }
-  .modal-actions .btn { flex: 1; min-width: 92px; }
+  /* Только подвал формы операции: три длинные подписи в ряд не влезают,
+     поэтому на узком экране кнопки идут столбиком во всю ширину.
+     Остальных модалок это правило не касается. */
+  #ops-modal .modal-actions { flex-direction: column; align-items: stretch; gap: 7px; }
+  #ops-modal .modal-actions .btn { width: 100%; }
+  #ops-modal .modal-actions-left { margin-right: 0; order: 9; }
 }
 
 /* ── Повторяющиеся операции ─────────────────────── */
@@ -940,6 +925,10 @@ select.filter-input option { background: var(--bg2); }
   align-items: center;
 }
 .modal-actions-left { margin-right: auto; }
+/* Подписи кнопок формы операции длинные — пусть лучше перенесутся
+   на вторую строку, чем сожмутся до нечитаемых огрызков */
+#ops-modal .modal-actions { flex-wrap: wrap; }
+#ops-modal .modal-actions .btn { white-space: nowrap; }
 
 /* ══════════════════════════════════════════════════
    PAGE LAYOUT (shared)

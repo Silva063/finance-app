@@ -47,7 +47,7 @@ const ctx = vm.createContext({
 });
 vm.runInContext(src + `
 ;globalThis.__i = {
-  local: opsLocalDate, setOff: opsSetDateOffset, sync: opsDateChipsSync,
+  local: opsLocalDate,
   save: opsFiltersSave, apply: opsFiltersApply, read: opsFiltersRead,
   forget: opsFiltersForget, statType: opsStatFilterType,
   fields: OPS_FILTER_FIELDS
@@ -66,27 +66,6 @@ t('вчера = минус один день', I.local(-1) === expectYest, `${I.
 t('формат ровно YYYY-MM-DD', /^\d{4}-\d{2}-\d{2}$/.test(I.local(0)), I.local(0));
 t('переход через месяц корректен', I.local(-40).length === 10 && I.local(-40) < I.local(0),
   I.local(-40));
-
-console.log('\n— чипы у поля даты —');
-mkEl('m-date','input');
-mkEl('m-date-today','button');
-mkEl('m-date-yesterday','button');
-I.setOff(0);
-t('кнопка «сегодня» ставит дату', nodes['m-date'].value === expectToday, nodes['m-date'].value);
-t('и подсвечивается', nodes['m-date-today'].classList.contains('is-active'), 'не подсвечена');
-t('«вчера» при этом не активна', !nodes['m-date-yesterday'].classList.contains('is-active'), 'активна');
-I.setOff(-1);
-t('кнопка «вчера» ставит дату', nodes['m-date'].value === expectYest, nodes['m-date'].value);
-t('подсветка переехала', nodes['m-date-yesterday'].classList.contains('is-active')
-  && !nodes['m-date-today'].classList.contains('is-active'), 'подсветка не та');
-nodes['m-date'].value = '2020-05-05';
-I.sync();
-t('произвольная дата — обе кнопки погасли',
-  !nodes['m-date-today'].classList.contains('is-active') && !nodes['m-date-yesterday'].classList.contains('is-active'),
-  'осталась подсветка');
-nodes['m-date'].value = '';
-I.sync();
-t('пустая дата не подсвечивает «сегодня»', !nodes['m-date-today'].classList.contains('is-active'), 'подсвечена');
 
 // ── фильтры ──────────────────────────────────────
 console.log('\n— сохранение фильтров —');
@@ -166,19 +145,34 @@ t('карточка «Итог» сбрасывает', nodes['f1type'].value ==
 
 // ── разметка и интеграция ────────────────────────
 console.log('— разметка —');
-t('кнопки даты есть в форме', html.includes('id="m-date-today"') && html.includes('id="m-date-yesterday"'), 'нет кнопок');
-// Внутри <label> чипы делали подпись выше соседней и ломали выравнивание
-// колонок в .form-row — проверяем, что они вне подписи.
-const dateField = html.slice(html.indexOf('<label>Дата'), html.indexOf('id="m-date-yesterday"'));
-t('чипы вынесены за пределы <label>',
-  dateField.indexOf('</label>') < dateField.indexOf('date-chips'),
-  'чипы снова внутри подписи — колонки съедут');
-t('чипы идут после поля ввода',
-  dateField.indexOf('id="m-date"') < dateField.indexOf('date-chips'),
-  'порядок неверный');
-t('подпись кнопки понятная',
-  html.includes('>Сохранить и добавить</button>'), 'подпись не обновлена');
-t('кнопка «Сохранить и добавить» есть', html.includes('id="m-save-more-btn"'), 'нет кнопки');
+const css = fs.readFileSync(ROOT + 'css/main.css', 'utf8');
+
+// От кнопок «сегодня/вчера» отказались — следов быть не должно
+t('кнопок даты в разметке нет', !html.includes('m-date-today') && !html.includes('date-chip'), 'остались следы');
+t('поле даты без лишних обработчиков', html.includes('<input type="date" id="m-date">'), 'на поле что-то навешано');
+t('стилей чипов не осталось', !css.includes('.date-chip'), 'стили остались');
+
+// Подвал: три кнопки в заданном порядке
+t('есть «Сохранить и закрыть»',  html.includes('>Сохранить и закрыть</button>'),  'нет кнопки');
+t('есть «Сохранить и добавить»', html.includes('>Сохранить и добавить</button>'), 'нет кнопки');
+t('есть «Отмена»',               html.includes('>Отмена</button>'),               'нет кнопки');
+const footer = html.slice(html.indexOf('id="m-del-btn"'), html.indexOf('id="m-del-btn"') + 700);
+t('порядок: закрыть → добавить → отмена',
+  footer.indexOf('Сохранить и закрыть') < footer.indexOf('Сохранить и добавить')
+  && footer.indexOf('Сохранить и добавить') < footer.indexOf('>Отмена<'),
+  'порядок не тот');
+t('«Сохранить и закрыть» — основное действие',
+  html.includes('class="btn btn-primary" onclick="opsSaveOp()">Сохранить и закрыть'), 'не primary');
+
+// На телефоне подписи длинные — кнопки должны идти столбиком, а не сжиматься
+t('на мобильном кнопки формы операции столбиком',
+  css.includes('#ops-modal .modal-actions { flex-direction: column'), 'правило не найдено');
+t('правило не задевает остальные модалки',
+  !css.includes('.modal-actions .btn { flex: 1'), 'общее правило всё ещё сжимает все модалки');
+t('подписи не ломаются посередине слова',
+  css.includes('#ops-modal .modal-actions .btn { white-space: nowrap; }'), 'нет nowrap');
+
+t('кнопка добавления есть', html.includes('id="m-save-more-btn"'), 'нет кнопки');
 t('кнопка вызывает opsSaveOp(true)', html.includes('opsSaveOp(true)'), 'не передан флаг');
 t('модуль подключён после app.js',
   html.indexOf('js/inputaid.js') > html.indexOf('js/app.js'), 'порядок неверный');

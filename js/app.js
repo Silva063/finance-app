@@ -985,7 +985,6 @@ function opsOpenAddModal() {
   document.getElementById('m-del-btn').style.display = 'none';
   const moreBtn = document.getElementById('m-save-more-btn');
   if (moreBtn) moreBtn.style.display = '';
-  if (typeof opsDateChipsSync === 'function') opsDateChipsSync();
   document.getElementById('ops-modal').classList.add('is-open');
 }
 function opsOpenEditModal(id) {
@@ -1003,7 +1002,6 @@ function opsOpenEditModal(id) {
   document.getElementById('m-del-btn').style.display = 'block';
   const moreBtnE = document.getElementById('m-save-more-btn');
   if (moreBtnE) moreBtnE.style.display = 'none';   // при правке «и ещё» не нужно
-  if (typeof opsDateChipsSync === 'function') opsDateChipsSync();
   document.getElementById('ops-modal').classList.add('is-open');
 }
 function opsCloseModal() {
