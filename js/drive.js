@@ -378,6 +378,13 @@ function _mergeOps(local, remote) {
     budget = { ...base, months: monthRes.items };
   }
 
+  // Шаблоны теперь можно редактировать, а внутри settingsSrc правка терялась бы
+  // так же, как терялись цели. Сливаем по id по _editedAt, удалённые держим надгробиями.
+  const tplRes = _mergeById(local.templates, remote.templates, {
+    localTombs:  local.tplPurged,
+    remoteTombs: remote.tplPurged
+  });
+
   // nextId kept for backward compat with old numeric ids
   const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
   const nextId = Math.max(
@@ -393,6 +400,8 @@ function _mergeOps(local, remote) {
     // объединённый список надгробий уезжает обратно на Drive —
     // так о окончательном удалении узнают остальные устройства
     purged: txnRes.purged,
+    templates: tplRes.items,
+    tplPurged: tplRes.purged,
     ...(budget ? { budget } : {}),
     _lastModified: new Date().toISOString(),
   };

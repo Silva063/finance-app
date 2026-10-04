@@ -996,6 +996,36 @@ function opsDeleteOp() {
   });
 }
 
+/* ── Enter подтверждает операцию ─────────────────── */
+// Правила простые и предсказуемые:
+//   на кнопке        — отдаём Enter браузеру, пусть нажимает кнопку;
+//   внутри позиций   — добавляем следующую позицию, как в таблице;
+//   в остальных полях — сохраняем операцию.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+
+  const modal = document.getElementById('ops-modal');
+  if (!modal || !modal.classList.contains('is-open')) return;
+
+  const tgt = e.target;
+  if (!tgt || !modal.contains(tgt)) return;
+  const tag = (tgt.tagName || '').toUpperCase();
+  if (tag === 'BUTTON' || tag === 'TEXTAREA' || tag === 'SUMMARY') return;
+
+  // в списке позиций Enter работает как «следующая строка»
+  if (tgt.closest && tgt.closest('#m-items-list')) {
+    e.preventDefault();
+    opsAddItem();
+    const rows = document.getElementById('m-items-list').children;
+    rows[rows.length - 1]?.querySelector('input')?.focus();
+    return;
+  }
+
+  e.preventDefault();
+  opsSaveOp();
+});
+
 /* ══════════════════════════════════════════════════
    СОСТАВНЫЕ ПОЗИЦИИ (ITEMS)
 ══════════════════════════════════════════════════ */
@@ -2813,50 +2843,185 @@ function opsCatAdd() {
 ══════════════════════════════════════════════════ */
 
 function opsTpls() { return opsState.templates || (opsState.templates = []); }
+function opsTplsPurged(state) {
+  const st = state || opsState;
+  return Array.isArray(st.tplPurged) ? st.tplPurged : [];
+}
+
+// Шаблоны сливаются по id, поэтому удаление обязано оставлять надгробие —
+// иначе объединение вернёт шаблон с устройства, которое о удалении не знает.
+function opsAddTplTombstones(ids) {
+  const now  = new Date().toISOString();
+  const list = opsTplsPurged().slice();
+  const have = new Set(list.map(x => String(x.id)));
+  for (const id of ids) {
+    const key = String(id);
+    if (!have.has(key)) { list.push({ id: key, at: now }); have.add(key); }
+  }
+  const cutoff = Date.now() - SYNC_TOMBSTONE_TTL_DAYS * 86400000;
+  opsState.tplPurged = list.filter(x => new Date(x.at || 0).getTime() >= cutoff);
+}
+
+let opsTplEditId = null;   // id шаблона, открытого на редактирование в списке
 
 function opsTplOpenModal() {
+  opsTplEditId = null;
   opsTplRender();
   document.getElementById('tpl-modal').classList.add('is-open');
 }
 function opsTplCloseModal() {
+  opsTplEditId = null;
   document.getElementById('tpl-modal').classList.remove('is-open');
 }
+
+function opsTplFind(id) { return opsTpls().find(t => String(t.id) === String(id)) || null; }
 
 function opsTplRender() {
   const list = opsTpls();
   const el = document.getElementById('tpl-list');
+  if (!el) return;
   if (!list.length) {
     el.innerHTML = '<div style="color:var(--muted);font-size:11px;text-align:center;padding:24px 0;">Шаблонов нет.<br>Открой форму операции и нажми «💾 Шаблон»</div>';
     return;
   }
-  el.innerHTML = list.map(t => {
-    const cat = t.cat ? opsCat(t.cat) : null;
-    const borderColor = cat ? cat.color : 'var(--line2)';
-    const typeTag = t.type === 'income'
-      ? '<span class="tag tag-income" style="font-size:9px;">↑ Приход</span>'
-      : '<span class="tag tag-expense" style="font-size:9px;">↓ Расход</span>';
-    const wayTag = t.way === 'Наличный'
-      ? '<span class="tag tag-cash" style="font-size:9px;">нал</span>'
-      : '<span class="tag tag-card" style="font-size:9px;">безнал</span>';
-    const amtPart = t.amount ? `<span style="font-size:10px;color:var(--text);font-weight:500;">${fmtAmt(Math.abs(t.amount))} руб</span>` : '';
-    const catPart = cat ? `<span style="font-size:10px;color:var(--muted);">${opsCatDisplay(cat)}</span>` : '';
-    const meta = [typeTag, wayTag, amtPart, catPart].filter(Boolean).join(' ');
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;
-                         background:var(--bg3);border-radius:var(--radius-sm);
-                         margin-bottom:5px;border-left:3px solid ${borderColor};">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;">${t.name}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${meta}</div>
-        ${t.comment ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.comment}</div>` : ''}
+  el.innerHTML = list.map(t =>
+    String(t.id) === String(opsTplEditId) ? opsTplEditFormHTML(t) : opsTplRowHTML(t)
+  ).join('');
+}
+
+function opsTplRowHTML(t) {
+  const cat = t.cat ? opsCat(t.cat) : null;
+  const borderColor = cat ? cat.color : 'var(--line2)';
+  const typeTag = t.type === 'income'
+    ? '<span class="tag tag-income" style="font-size:9px;">↑ Приход</span>'
+    : '<span class="tag tag-expense" style="font-size:9px;">↓ Расход</span>';
+  const wayTag = t.way === 'Наличный'
+    ? '<span class="tag tag-cash" style="font-size:9px;">нал</span>'
+    : '<span class="tag tag-card" style="font-size:9px;">безнал</span>';
+  const amtPart = t.amount ? `<span style="font-size:10px;color:var(--text);font-weight:500;">${fmtAmt(Math.abs(t.amount))} руб</span>` : '';
+  const catPart = cat ? `<span style="font-size:10px;color:var(--muted);">${escHtml(opsCatDisplay(cat))}</span>` : '';
+  const itemsPart = (t.items && t.items.length)
+    ? `<span style="font-size:9px;color:var(--muted2);">позиций: ${t.items.length}</span>` : '';
+  const meta = [typeTag, wayTag, amtPart, catPart, itemsPart].filter(Boolean).join(' ');
+  return `<div class="tpl-row" style="border-left-color:${borderColor}">
+    <div style="flex:1;min-width:0;">
+      <div class="tpl-row-name">${escHtml(t.name)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${meta}</div>
+      ${t.comment ? `<div class="tpl-row-comment">${escHtml(t.comment)}</div>` : ''}
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="opsTplApply('${t.id}')">Применить</button>
+    <button class="btn btn-sm" title="Изменить шаблон" onclick="opsTplEdit('${t.id}')">✎</button>
+    <button class="btn btn-sm btn-danger" title="Удалить шаблон" onclick="opsTplDelete('${t.id}')">✕</button>
+  </div>`;
+}
+
+function opsTplEditFormHTML(t) {
+  const catOpts = '<option value="">— без категории —</option>' +
+    opsCats().map(c => `<option value="${escHtml(c.id)}" ${c.id === t.cat ? 'selected' : ''}>${escHtml(opsCatDisplay(c))}</option>`).join('');
+  const nItems = (t.items || []).length;
+  return `<div class="tpl-edit">
+    <div class="tpl-edit-title">Изменение шаблона</div>
+
+    <div class="form-field">
+      <label>Название</label>
+      <input type="text" id="tpl-e-name" value="${escHtml(t.name)}" placeholder="Название шаблона">
+    </div>
+
+    <div class="tpl-edit-grid">
+      <div class="form-field">
+        <label>Тип</label>
+        <select id="tpl-e-type">
+          <option value="expense" ${t.type === 'expense' ? 'selected' : ''}>Расход</option>
+          <option value="income"  ${t.type === 'income'  ? 'selected' : ''}>Приход</option>
+        </select>
       </div>
-      <button class="btn btn-sm btn-primary" onclick="opsTplApply('${t.id}')">Применить</button>
-      <button class="btn btn-sm btn-danger" onclick="opsTplDelete('${t.id}')">✕</button>
-    </div>`;
-  }).join('');
+      <div class="form-field">
+        <label>Способ</label>
+        <select id="tpl-e-way">
+          <option value="Безналичный" ${t.way === 'Безналичный' ? 'selected' : ''}>Безналичный</option>
+          <option value="Наличный"    ${t.way === 'Наличный'    ? 'selected' : ''}>Наличный</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Сумма, руб</label>
+        <input type="text" inputmode="decimal" id="tpl-e-amt" value="${t.amount ? Math.abs(t.amount) : ''}" placeholder="не задана">
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label>Категория</label>
+      <select id="tpl-e-cat">${catOpts}</select>
+    </div>
+
+    <div class="form-field">
+      <label>Комментарий</label>
+      <input type="text" id="tpl-e-comment" value="${escHtml(t.comment || '')}" placeholder="Описание операции...">
+    </div>
+
+    <div class="tpl-edit-items">
+      ${nItems
+        ? `Позиции внутри шаблона: <b>${nItems}</b> — сохраняются как есть.
+           <button type="button" class="budget-link" onclick="opsTplClearItems('${t.id}')">убрать позиции</button>`
+        : 'Позиций в шаблоне нет. Чтобы добавить — примените шаблон, заполните позиции в форме операции и сохраните поверх этого же шаблона.'}
+    </div>
+
+    <div class="tpl-edit-actions">
+      <button class="btn btn-sm" onclick="opsTplCancelEdit()">Отмена</button>
+      <button class="btn btn-sm btn-primary" onclick="opsTplSaveEdit('${t.id}')">✓ Сохранить</button>
+    </div>
+  </div>`;
+}
+
+function opsTplEdit(id) {
+  if (!opsTplFind(id)) return;
+  opsTplEditId = id;
+  opsTplRender();
+  document.getElementById('tpl-e-name')?.focus();
+}
+
+function opsTplCancelEdit() {
+  opsTplEditId = null;
+  opsTplRender();
+}
+
+function opsTplSaveEdit(id) {
+  const t = opsTplFind(id);
+  if (!t) return;
+  const name = (document.getElementById('tpl-e-name')?.value || '').trim();
+  if (!name) { showInlineErr('tpl-e-name', 'Введите название шаблона'); return; }
+
+  const rawAmt = (document.getElementById('tpl-e-amt')?.value || '').trim();
+  const amt    = rawAmt === '' ? 0 : parseFloat(rawAmt.replace(',', '.'));
+
+  t.name      = name;
+  t.type      = document.getElementById('tpl-e-type').value;
+  t.way       = document.getElementById('tpl-e-way').value;
+  t.amount    = (!rawAmt || isNaN(amt) || amt < 0) ? 0 : +amt.toFixed(2);
+  t.cat       = document.getElementById('tpl-e-cat').value;
+  t.comment   = (document.getElementById('tpl-e-comment')?.value || '').trim();
+  t._editedAt = new Date().toISOString();   // без метки merge не выберет свежую версию
+
+  opsState.templates = opsTpls();
+  opsSave();
+  opsTplEditId = null;
+  opsTplRender();
+  showOk('✓ Шаблон обновлён');
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+}
+
+function opsTplClearItems(id) {
+  const t = opsTplFind(id);
+  if (!t) return;
+  t.items = [];
+  delete t.itemsMode;
+  t._editedAt = new Date().toISOString();
+  opsSave();
+  opsTplRender();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
 }
 
 function opsTplApply(id) {
-  const t = opsTpls().find(t => t.id === id);
+  const t = opsTplFind(id);
   if (!t) return;
   opsTplCloseModal();
   const opsModalOpen = document.getElementById('ops-modal').classList.contains('is-open');
@@ -2871,16 +3036,21 @@ function opsTplApply(id) {
   document.getElementById('m-amt').value     = t.amount ? Math.abs(t.amount) : '';
   document.getElementById('m-comment').value = t.comment || '';
   opsFillCatSel(t.cat || '');
+  // категория из шаблона — осознанный выбор, автокатегоризация её не перетирает
+  if (typeof opsAcReset === 'function') opsAcReset(!!t.cat);
   opsLoadItems(t.items || [], t.itemsMode || 'none');
   if (!opsModalOpen) document.getElementById('ops-modal').classList.add('is-open');
 }
 
 function opsTplDelete(id) {
-  appConfirm('Удалить шаблон?').then(ok => {
+  const t = opsTplFind(id);
+  appConfirm(`Удалить шаблон${t ? ` «${t.name}»` : ''}?`).then(ok => {
     if (!ok) return;
-    opsState.templates = opsTpls().filter(t => t.id !== id);
+    opsAddTplTombstones([id]);
+    opsState.templates = opsTpls().filter(x => String(x.id) !== String(id));
+    if (String(opsTplEditId) === String(id)) opsTplEditId = null;
     opsSave(); opsTplRender();
-    if (driveToken) driveDebouncedPush('ops');
+    if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
   });
 }
 
@@ -2893,12 +3063,33 @@ function opsTplSaveFromModal() {
   const itemsMode = opsGetCurrentMode();
   const items     = itemsMode !== 'none' ? opsGetItems() : [];
   const defName   = comment || (cat ? opsCat(cat).name : '') || (type === 'income' ? 'Приход' : 'Расход');
+
   appPrompt('Название шаблона:', defName).then(name => {
-    if (!name?.trim()) return;
-    opsState.templates.push({ id: 'tpl_' + Date.now(), name: name.trim(), type, way, amount, cat, comment, items, itemsMode });
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const fields = { name: nm, type, way, amount, cat, comment, items, itemsMode,
+                     _editedAt: new Date().toISOString() };
+
+    // Имя уже занято — предлагаем заменить, а не плодить второй такой же шаблон
+    const dup = opsTpls().find(t => (t.name || '').trim().toLowerCase() === nm.toLowerCase());
+    if (dup) {
+      appConfirm(`Шаблон «${dup.name}» уже есть. Заменить его?`).then(ok => {
+        if (!ok) { showWarn('Шаблон не сохранён — выберите другое название'); return; }
+        Object.assign(dup, fields);
+        opsSave();
+        showOk('✓ Шаблон обновлён: ' + nm);
+        if (typeof opsTplEditId !== 'undefined') opsTplEditId = null;
+        opsTplRender();
+        if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+      });
+      return;
+    }
+
+    opsTpls().push({ id: 'tpl_' + Date.now(), ...fields });
     opsSave();
-    showOk('✓ Шаблон сохранён: ' + name.trim());
-    if (driveToken) driveDebouncedPush('ops');
+    showOk('✓ Шаблон сохранён: ' + nm);
+    opsTplRender();
+    if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
   });
 }
 

@@ -631,6 +631,49 @@ select.filter-input option { background: var(--bg2); }
 }
 .form-field { margin-bottom: 13px; }
 
+/* ── Шаблоны операций: строка и форма правки ────── */
+.tpl-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; margin-bottom: 5px;
+  background: var(--bg3); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--line2);
+}
+.tpl-row-name {
+  font-size: 12px; font-weight: 500; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tpl-row-comment {
+  font-size: 10px; color: var(--muted); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tpl-edit {
+  background: var(--bg3); border: 1px solid var(--acc);
+  border-radius: var(--radius-sm); padding: 11px 12px; margin-bottom: 5px;
+}
+.tpl-edit-title {
+  font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--acc2); margin-bottom: 10px;
+}
+.tpl-edit-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;
+}
+.tpl-edit .form-field { margin-bottom: 10px; }
+.tpl-edit .form-field input,
+.tpl-edit .form-field select { font-size: 11px; padding: 6px 8px; }
+.tpl-edit-items {
+  font-size: 9.5px; color: var(--muted2); line-height: 1.55;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 7px 9px; margin-bottom: 11px;
+}
+.tpl-edit-items b { color: var(--muted); }
+.tpl-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+@media (max-width: 1024px) {
+  .tpl-row { flex-wrap: wrap; }
+  .tpl-row .btn { flex: 1; }
+  .tpl-edit-grid { grid-template-columns: 1fr 1fr; }
+}
+
 /* ══════════════════════════════════════════════════
    ЛИМИТ ЗАТРАТ НА МЕСЯЦ
 ══════════════════════════════════════════════════ */
