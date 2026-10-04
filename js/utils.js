@@ -69,12 +69,13 @@ function appConfirm(msg) {
     const ov = document.createElement('div');
     ov.className = 'confirm-overlay';
     ov.innerHTML = `<div class="confirm-box">
-      <div class="confirm-msg">${msg}</div>
+      <div class="confirm-msg"></div>
       <div class="confirm-actions">
         <button class="btn btn-sm" id="cf-no">Отмена</button>
         <button class="btn btn-sm btn-danger" id="cf-yes">Подтвердить</button>
       </div>
     </div>`;
+    ov.querySelector('.confirm-msg').textContent = msg;   // msg содержит пользовательский текст
     document.body.appendChild(ov);
     const cleanup = ok => { ov.remove(); resolve(ok); };
     ov.querySelector('#cf-yes').onclick = () => cleanup(true);
@@ -89,7 +90,7 @@ function appPrompt(msg, defaultVal) {
     const ov = document.createElement('div');
     ov.className = 'confirm-overlay';
     ov.innerHTML = `<div class="confirm-box">
-      <div class="confirm-msg">${msg}</div>
+      <div class="confirm-msg"></div>
       <input id="ap-input" class="filter-input" type="text" value="${(defaultVal||'').replace(/"/g,'&quot;')}"
         style="width:100%;margin-bottom:14px;font-size:13px;">
       <div class="confirm-actions">
@@ -97,6 +98,7 @@ function appPrompt(msg, defaultVal) {
         <button class="btn btn-sm btn-primary" id="ap-ok">OK</button>
       </div>
     </div>`;
+    ov.querySelector('.confirm-msg').textContent = msg;   // msg содержит пользовательский текст
     document.body.appendChild(ov);
     const inp = ov.querySelector('#ap-input');
     inp.focus(); inp.select();

@@ -13,8 +13,8 @@
 
 <!-- ── Внешние библиотеки ──────────────────────────── -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 
 <!-- ── Стили ────────────────────────────────────────── -->
 <link rel="stylesheet" href="css/main.css">
@@ -998,6 +998,21 @@
 <!-- ══════════════════════════════════════════════
      MODAL: ШАБЛОНЫ ОПЕРАЦИЙ
 ══════════════════════════════════════════════ -->
+<div class="overlay" id="rec-modal">
+  <div class="modal" style="width:480px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
+    <div class="modal-title">↻ Ожидаются повторяющиеся операции</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+      По расписанию шаблонов срок уже наступил. Добавить операции или пропустить этот месяц?
+    </div>
+    <div id="rec-list" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="modal-actions" style="margin-top:14px;flex-shrink:0;">
+      <button class="btn modal-actions-left" onclick="opsRecSkipAll()">Пропустить все</button>
+      <button class="btn" onclick="opsRecLater()">Позже</button>
+      <button class="btn btn-primary" onclick="opsRecConfirmAll()">Добавить все</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="budget-modal">
   <div class="modal" style="width:460px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
     <div class="modal-title">◎ Лимит затрат на месяц</div>
@@ -1038,6 +1053,7 @@
 <script src="js/autocat.js"></script>
 <script src="js/swipe.js"></script>
 <script src="js/budget.js"></script>
+<script src="js/recurring.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/snapshot.js"></script>
 <script src="js/drive.js"></script>

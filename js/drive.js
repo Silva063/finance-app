@@ -368,6 +368,15 @@ function _mergeOps(local, remote) {
   // со свежим _lastModified, а его двигает любой синк — именно так
   // терялись цели. Скаляры берём по собственной метке бюджета,
   // а переопределения по месяцам — по id, тем же _mergeById.
+  // переключатель напоминаний — тоже по своей метке, а не внутри settingsSrc
+  let recurring;
+  const lr = local.recurring, rr = remote.recurring;
+  if (lr || rr) {
+    const lrt = new Date((lr && lr._editedAt) || 0).getTime();
+    const rrt = new Date((rr && rr._editedAt) || 0).getTime();
+    recurring = lrt >= rrt ? (lr || rr) : (rr || lr);
+  }
+
   let budget;
   const lb = local.budget, rb = remote.budget;
   if (lb || rb) {
@@ -383,6 +392,19 @@ function _mergeOps(local, remote) {
   const tplRes = _mergeById(local.templates, remote.templates, {
     localTombs:  local.tplPurged,
     remoteTombs: remote.tplPurged
+  });
+
+  // Категории тоже ездили внутри settingsSrc — переименование или правка
+  // лимита на одном устройстве терялась. Порядок списка пользователь
+  // задаёт перетаскиванием, поэтому он живёт в поле ord, а не в позиции массива.
+  const catRes = _mergeById(local.categories, remote.categories, {
+    localTombs:  local.catPurged,
+    remoteTombs: remote.catPurged
+  });
+  const categories = catRes.items.slice().sort((a, b) => {
+    const ao = Number.isFinite(a.ord) ? a.ord : 1e9;
+    const bo = Number.isFinite(b.ord) ? b.ord : 1e9;
+    return ao - bo;
   });
 
   // nextId kept for backward compat with old numeric ids
@@ -402,7 +424,10 @@ function _mergeOps(local, remote) {
     purged: txnRes.purged,
     templates: tplRes.items,
     tplPurged: tplRes.purged,
+    ...(categories.length ? { categories } : {}),
+    catPurged: catRes.purged,
     ...(budget ? { budget } : {}),
+    ...(recurring ? { recurring } : {}),
     _lastModified: new Date().toISOString(),
   };
 }

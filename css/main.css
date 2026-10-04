@@ -631,6 +631,44 @@ select.filter-input option { background: var(--bg2); }
 }
 .form-field { margin-bottom: 13px; }
 
+/* ── Повторяющиеся операции ─────────────────────── */
+.tpl-rec-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; margin-bottom: 10px;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 10.5px; color: var(--muted);
+}
+.tpl-repeat-tag {
+  border-color: var(--acc) !important;
+  color: var(--acc2) !important;
+  font-size: 9px;
+}
+.rec-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 10px; margin-bottom: 5px;
+  background: var(--bg3); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--acc);
+}
+.rec-row-name {
+  font-size: 12px; font-weight: 500; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rec-row-meta {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  font-size: 10px; color: var(--muted); font-family: var(--mono);
+}
+.chart-unavailable {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 10px;
+  font-size: 10px; color: var(--muted2);
+}
+@media (max-width: 1024px) {
+  .rec-row { flex-wrap: wrap; }
+  .rec-row .btn { flex: 1; }
+}
+
 /* ── Шаблоны операций: строка и форма правки ────── */
 .tpl-row {
   display: flex; align-items: center; gap: 6px;

@@ -84,6 +84,30 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Библиотека графиков может не загрузиться (нет сети, вытеснился кэш).
+// Исключение посреди рендера обрывает всю функцию и оставляет страницу
+// недорисованной, поэтому создание графика всегда идёт через обёртку.
+function opsNewChart(canvas, cfg) {
+  if (!canvas) return null;
+  if (typeof Chart === 'undefined') { opsChartFallback(canvas); return null; }
+  try {
+    return new Chart(canvas, cfg);
+  } catch (e) {
+    console.warn('Не удалось построить график:', e);
+    opsChartFallback(canvas);
+    return null;
+  }
+}
+
+function opsChartFallback(canvas) {
+  const wrap = canvas && canvas.parentElement;
+  if (!wrap || wrap.querySelector('.chart-unavailable')) return;
+  const d = document.createElement('div');
+  d.className = 'chart-unavailable';
+  d.textContent = 'График недоступен — библиотека не загрузилась';
+  wrap.appendChild(d);
+}
+
 function getChartDefaults() {
   return {
     responsive: true,
@@ -140,7 +164,7 @@ const OPS_DEFAULT_CATS = [
 
 let opsState = opsLoad();
 if (!opsState.nextId) opsState.nextId = opsState.txns.length + 1;
-if (!opsState.categories) opsState.categories = OPS_DEFAULT_CATS;
+if (!opsState.categories) opsState.categories = OPS_DEFAULT_CATS.map((c, i) => ({ ...c, ord: i }));
 // emoji OFF by default
 if (opsState.catUseEmoji === undefined) opsState.catUseEmoji = false;
 if (!opsState.templates) opsState.templates = [];
@@ -153,6 +177,32 @@ function opsGenId() {
 }
 
 function opsCats() { return opsState.categories || OPS_DEFAULT_CATS; }
+
+function opsCatsPurged(state) {
+  const st = state || opsState;
+  return Array.isArray(st.catPurged) ? st.catPurged : [];
+}
+
+// Категории сливаются по id, поэтому удаление обязано оставлять надгробие.
+function opsAddCatTombstones(ids) {
+  const now  = new Date().toISOString();
+  const list = opsCatsPurged().slice();
+  const have = new Set(list.map(x => String(x.id)));
+  for (const id of ids) {
+    const key = String(id);
+    if (!have.has(key)) { list.push({ id: key, at: now }); have.add(key); }
+  }
+  const cutoff = Date.now() - SYNC_TOMBSTONE_TTL_DAYS * 86400000;
+  opsState.catPurged = list.filter(x => new Date(x.at || 0).getTime() >= cutoff);
+}
+
+// Любая правка категории обязана двигать метку и уезжать на Drive —
+// без метки merge выберет копию с другого устройства.
+function opsCatTouch(cat) {
+  if (cat) cat._editedAt = new Date().toISOString();
+  opsSave();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+}
 function opsCat(id) { return opsCats().find(c => c.id === id) || { name: id || '—', color:'#6b7280', icon:'📦' }; }
 function opsCatDisplay(cat) {
   // Returns display name — with or without emoji depending on setting
@@ -332,7 +382,7 @@ function renderP1() {
       </div></td>
       ${catCell}
       <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount,true)}</td>
-      <td style="color:var(--muted)">${t.comment||'—'}</td>
+      <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
       <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
     </tr>`;
     }).join('');
@@ -641,7 +691,7 @@ function c1Render() {
     ticks: { color: cssVar('--acc'), font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 5, callback: v => c1Compact(v) }
   };
 
-  chart1Inst = new Chart(canvas, {
+  chart1Inst = opsNewChart(canvas, {
     type: lineish ? 'line' : 'bar',
     data: { labels: short, datasets: ds },
     options: {
@@ -682,8 +732,10 @@ function c1Render() {
       scales
     }
   });
-  chart1Inst._catAxis   = catAx;
-  chart1Inst._tickColor = tickColor;
+  if (chart1Inst) {
+    chart1Inst._catAxis   = catAx;
+    chart1Inst._tickColor = tickColor;
+  }
 
   // Прокручиваем к последним месяцам — они интереснее всего
   const scroll = document.getElementById('c1-scroll');
@@ -744,7 +796,7 @@ function renderP2() {
     <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
     <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
-    <td style="color:var(--muted)">${t.comment||'—'}</td>
+    <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
     <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
@@ -784,7 +836,7 @@ function renderP5() {
     <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
     <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
     <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
-    <td style="color:var(--muted)">${t.comment||'—'}</td>
+    <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
     <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
@@ -816,7 +868,7 @@ function renderP3() {
           <span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span>
           <span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span>
           <span class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;font-size:12px;min-width:88px;flex-shrink:0">${fmtAmt(t.amount,true)}</span>
-          <span class="txn-comment">${t.comment||'—'}</span>
+          <span class="txn-comment">${escHtml(t.comment)||'—'}</span>
           <button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button>
         </div>`).join('');
     }
@@ -903,7 +955,7 @@ function renderP4() {
     <td style="font-size:11px;color:var(--muted)">${fmtAmt(t.cashRun,true)}</td>
     <td style="font-size:11px;color:var(--muted)">${fmtAmt(t.cardRun,true)}</td>
     <td style="font-size:11px;font-weight:500;color:${t.totalRun>=0?'var(--green)':'var(--red)'}">${fmtAmt(t.totalRun,true)}</td>
-    <td style="color:var(--muted)">${t.comment||'—'}</td>
+    <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
     <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
   </tr>`).join('');
 }
@@ -954,6 +1006,9 @@ function opsSaveOp() {
   const comment = document.getElementById('m-comment').value.trim();
   const cat     = document.getElementById('m-cat').value;
   const amount  = type === 'expense' ? -Math.abs(rawAmt) : Math.abs(rawAmt);
+  // Поле m-amt объявлено как number: при некорректном вводе браузер отдаёт
+  // пустую строку, parseFloat даёт NaN, и операция тихо уходила нулевой.
+  if (!rawAmt) showWarn('! Сумма не заполнена — операция сохранена с нулём');
   const itemsMode = opsGetCurrentMode();
   const items   = itemsMode !== 'none' ? opsGetItems() : [];
 
@@ -1160,7 +1215,7 @@ function opsToggleItems(id) {
   const rows = t.items.map(i => {
     const lineTotal = i.qty * i.price;
     return `<div class="txn-item-line">
-      <span class="txn-item-name">${i.name || '—'}</span>
+      <span class="txn-item-name">${escHtml(i.name) || '—'}</span>
       <span class="txn-item-qty">${i.qty}×</span>
       <span class="txn-item-price">${fmtN(i.price)} руб</span>
       <span class="txn-item-total ${lineTotal>=0?'amt-pos':'amt-neg'}">${fmtN(lineTotal)}</span>
@@ -1192,6 +1247,7 @@ function opsExportJSON() {
   a.click();
 }
 function opsExportXLSX() {
+  if (typeof XLSX === 'undefined') { showErr('Библиотека таблиц не загрузилась — экспорт в Excel недоступен'); return; }
   const sorted = [...opsState.txns.filter(t => !t._deleted)].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
   const rows   = sorted.map(t => [fmtDateFull(t.date), t.type==='income'?'Приход':'Расход', t.way, t.amount, t.comment||'']);
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1203,6 +1259,10 @@ function opsExportXLSX() {
 function opsImportFile(input) {
   const file = input.files[0]; if (!file) return;
   const name = file.name.toLowerCase();
+  if (!name.endsWith('.json') && typeof XLSX === 'undefined') {
+    showErr('Библиотека таблиц не загрузилась — импорт Excel недоступен, используйте JSON');
+    input.value = ''; return;
+  }
   const r = new FileReader();
   if (name.endsWith('.json')) {
     r.onload = e => {
@@ -1619,7 +1679,7 @@ function invRenderCurrent() {
     const curLabel = sec.currency !== base ? ` (${sec.currency})` : '';
     html += `<div class="inv-section">
       <div class="inv-section-header">
-        <div class="inv-section-name">${sec.name}</div>
+        <div class="inv-section-name">${escHtml(sec.name)}</div>
         <div class="inv-section-total" id="invST_${sec.id}"></div>
       </div>`;
 
@@ -1859,7 +1919,7 @@ function invShowDashboard() {
   const curCards = nonBaseCurs.map(c => {
     const amt = latest.currencyTotals[c.code] || 0;
     const baseAmt = amt * (invConvertRate(c.code, base, 'buy') || 1);
-    return `<div class="stat-card"><div class="stat-card-label">${c.name}</div><div class="stat-card-value ${amt>0?'is-pos':'is-neu'}">${amt.toLocaleString('ru-RU')} ${c.code}</div><div class="stat-card-sub">≈ ${invFmt(baseAmt)} ${base}</div></div>`;
+    return `<div class="stat-card"><div class="stat-card-label">${escHtml(c.name)}</div><div class="stat-card-value ${amt>0?'is-pos':'is-neu'}">${amt.toLocaleString('ru-RU')} ${c.code}</div><div class="stat-card-sub">≈ ${invFmt(baseAmt)} ${base}</div></div>`;
   }).join('');
 
   const cards = `
@@ -1937,7 +1997,7 @@ function invShowDashboard() {
   const cGreen = cssVar('--green');
   const cRed   = cssVar('--red');
 
-  invChartA = new Chart(document.getElementById('invChartA'), {
+  invChartA = opsNewChart(document.getElementById('invChartA'), {
     type: 'line',
     data: {
       labels: allLabels,
@@ -1951,10 +2011,10 @@ function invShowDashboard() {
       onHover(evt, els) { evt.native.target.style.cursor = els.length?'pointer':'default'; }
     }
   });
-  invChartA._rows = invDashRows;
+  if (invChartA) invChartA._rows = invDashRows;
 
   const diffColors = allDiff.map(v => v===null ? 'transparent' : v>=0 ? cGreen+'a6' : cRed+'a6');
-  invChartB = new Chart(document.getElementById('invChartB'), {
+  invChartB = opsNewChart(document.getElementById('invChartB'), {
     type: 'bar',
     data: { labels:allLabels, datasets:[{ label:'Изменение', data:allDiff.map(v=>v??0), backgroundColor:diffColors, borderColor:diffColors, borderWidth:1, borderRadius:3 }] },
     options: { ...getChartDefaults(),
@@ -1963,7 +2023,7 @@ function invShowDashboard() {
       onHover(evt, els) { evt.native.target.style.cursor = els.length?'pointer':'default'; }
     }
   });
-  invChartB._rows = invDashRows;
+  if (invChartB) invChartB._rows = invDashRows;
 
   // Restore saved filter state
   _invRestoreChartState();
@@ -2165,7 +2225,7 @@ function invRenderConfigCurrencies() {
     ` + invCurrencyList().map(c => `
     <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--line);border-radius:var(--radius-sm);margin-bottom:5px;">
       <span style="font-family:var(--head);font-size:9px;font-weight:700;color:${c.code===base?'var(--amber)':'var(--acc2)'};width:40px;">${c.code}</span>
-      <span style="flex:1;font-size:11px;color:var(--muted)">${c.name}</span>
+      <span style="flex:1;font-size:11px;color:var(--muted)">${escHtml(c.name)}</span>
       ${c.code === base ? '<span class="tag tag-cash" style="font-size:8px;">BASE</span>' : ''}
       <button class="btn btn-sm" onclick="invOpenCurrencyModal('${c.code}')">✎</button>
     </div>`).join('');
@@ -2184,7 +2244,7 @@ function invRenderConfigBlocks() {
                    touch-action:none;"
             title="Перетащи для изменения порядка">⠿</span>
       <span style="font-size:9px;color:var(--muted2);width:16px;text-align:right;flex-shrink:0;">${i+1}</span>
-      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sec.name}</span>
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(sec.name)}</span>
       <span class="tag tag-neutral" style="flex-shrink:0;">${sec.ekosh ? 'эл.' : 'нал.'}</span>
       <span style="font-size:9px;color:var(--muted);width:32px;flex-shrink:0;">${sec.currency}</span>
       ${sec.pmr
@@ -2366,7 +2426,7 @@ function invOpenBlockModal(secId) {
 
   // Fill currency select
   const curSel = document.getElementById('blk-currency');
-  curSel.innerHTML = invCurrencyList().map(c => `<option value="${c.code}">${c.code} — ${c.name}</option>`).join('');
+  curSel.innerHTML = invCurrencyList().map(c => `<option value="${escHtml(c.code)}">${escHtml(c.code)} — ${escHtml(c.name)}</option>`).join('');
 
   if (isEdit) {
     const sec = invSections().find(s => s.id === secId);
@@ -2525,7 +2585,7 @@ function renderP6() {
   const colors = sorted.map(([id]) => id === '__none__' ? '#6b7280' : opsCat(id).color);
   if (chart6Inst) { chart6Inst.destroy(); chart6Inst = null; }
   const cd = getChartDefaults();
-  chart6Inst = new Chart(document.getElementById('chart-cat'), {
+  chart6Inst = opsNewChart(document.getElementById('chart-cat'), {
     type: chartType,
     data: { labels, datasets: [{ data, backgroundColor: colors.map(c => c + 'cc'), borderColor: colors, borderWidth: 2 }] },
     options: { ...cd,
@@ -2681,7 +2741,7 @@ function p6ToggleTxns(catId, event) {
       <span class="tag ${t.type === 'income' ? 'tag-income' : 'tag-expense'}" style="font-size:9px;">${t.type === 'income' ? '↑' : '↓'}</span>
       <span class="tag ${t.way === 'Наличный' ? 'tag-cash' : 'tag-card'}" style="font-size:9px;">${t.way === 'Наличный' ? 'нал' : 'безнал'}</span>
       <span class="${t.amount >= 0 ? 'amt-pos' : 'amt-neg'}" style="font-size:11px;font-weight:500;min-width:72px;flex-shrink:0;">${fmtAmt(t.amount, true)}</span>
-      <span style="font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.comment || '—'}</span>
+      <span style="font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(t.comment) || '—'}</span>
       <button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')" style="flex-shrink:0;">✎</button>
     </div>`).join('');
 
@@ -2713,13 +2773,13 @@ function opsCatConfigRender() {
       <input type="color" value="${c.color}" style="width:28px;height:24px;border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;"
              onchange="opsCatUpdateColor('${c.id}',this.value)">
       <span style="font-size:14px;cursor:pointer;min-width:20px;flex-shrink:0;" onclick="opsCatEditIcon('${c.id}')" title="Изменить иконку">${c.icon}</span>
-      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.name}</span>
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</span>
       <input type="text" inputmode="numeric" value="${c.limit || ''}" placeholder="лимит"
              title="Лимит расходов в месяц (оставь пустым — без лимита)"
              style="width:68px;font-size:10px;text-align:right;flex-shrink:0;padding:3px 5px;"
              class="filter-input"
              onchange="opsCatUpdateLimit('${c.id}', this.value)">
-      <button class="btn btn-sm" onclick="opsCatEditName('${c.id}','${c.name.replace(/'/g,"\\'")}')">✎</button>
+      <button class="btn btn-sm" onclick="opsCatEditName('${c.id}')">✎</button>
       <button class="btn btn-sm btn-danger" onclick="opsCatDelete('${c.id}')">✕</button>
     </div>`).join('');
 
@@ -2793,28 +2853,33 @@ function _opsCatReorder(fromId, toId, after) {
   const ti = cats.findIndex(c => c.id === toId);
   if (ti < 0) { cats.splice(fi, 0, moved); return; }
   cats.splice(after ? ti+1 : ti, 0, moved);
+  // Порядок нужен явным полем: слияние по id не сохраняет позицию в массиве
+  const now = new Date().toISOString();
+  cats.forEach((c, i) => { c.ord = i; c._editedAt = now; });
   opsSave(); opsCatConfigRender();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
 }
 function opsCatUpdateColor(id, color) {
-  const c = opsCats().find(c=>c.id===id); if(c) { c.color=color; opsSave(); opsCatConfigRender(); }
+  const c = opsCats().find(c=>c.id===id);
+  if (c) { c.color = color; opsCatTouch(c); opsCatConfigRender(); }
 }
 function opsCatUpdateLimit(id, value) {
   const c = opsCats().find(c => c.id === id); if (!c) return;
   const n = parseFloat(value);
   c.limit = (!value || isNaN(n) || n <= 0) ? undefined : n;
-  opsSave();
-  if (driveToken) driveDebouncedPush('ops');
+  opsCatTouch(c);
 }
 function opsCatEditIcon(id) {
   const c = opsCats().find(c=>c.id===id); if(!c) return;
   appPrompt('Эмодзи для категории:', c.icon).then(icon => {
-    if (icon !== null) { c.icon = icon.trim() || c.icon; opsSave(); opsCatConfigRender(); }
+    if (icon !== null) { c.icon = icon.trim() || c.icon; opsCatTouch(c); opsCatConfigRender(); }
   });
 }
-function opsCatEditName(id, name) {
-  appPrompt('Название категории:', name).then(newName => {
+function opsCatEditName(id) {
+  const cur = opsCats().find(c => c.id === id);
+  appPrompt('Название категории:', cur ? cur.name : '').then(newName => {
     if (newName !== null && newName.trim()) {
-      const c = opsCats().find(c=>c.id===id); if(c) { c.name=newName.trim(); opsSave(); opsCatConfigRender(); }
+      const c = opsCats().find(c=>c.id===id); if(c) { c.name=newName.trim(); opsCatTouch(c); opsCatConfigRender(); }
     }
   });
 }
@@ -2823,16 +2888,20 @@ function opsCatDelete(id) {
   const label = cat ? cat.name : id;
   appConfirm(`Удалить категорию "${label}"? У операций с ней она будет сброшена.`).then(ok => {
     if (!ok) return;
-    opsState.txns.forEach(t => { if(t.cat===id) t.cat=''; });
+    const now = new Date().toISOString();
+    opsState.txns.forEach(t => { if (t.cat === id) { t.cat = ''; t._editedAt = now; } });
+    opsAddCatTombstones([id]);
     opsState.categories = opsCats().filter(c=>c.id!==id);
     opsSave(); opsCatConfigRender();
+    if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
   });
 }
 function opsCatAdd() {
   appPrompt('Название новой категории:', '').then(name => {
     if (!name?.trim()) return;
     const id = 'cat_' + Date.now();
-    opsCats().push({ id, name:name.trim(), color:'#6366f1', icon:'📌' });
+    opsCats().push({ id, name:name.trim(), color:'#6366f1', icon:'📌',
+                     ord: opsCats().length, _editedAt: new Date().toISOString() });
     opsSave(); opsCatConfigRender();
     if (driveToken) driveDebouncedPush('ops');
   });
@@ -2884,7 +2953,15 @@ function opsTplRender() {
     el.innerHTML = '<div style="color:var(--muted);font-size:11px;text-align:center;padding:24px 0;">Шаблонов нет.<br>Открой форму операции и нажми «💾 Шаблон»</div>';
     return;
   }
-  el.innerHTML = list.map(t =>
+
+  const on = (typeof opsRecEnabled === 'function') ? opsRecEnabled() : true;
+  const sw = (typeof opsRecToggle === 'function')
+    ? `<div class="tpl-rec-switch">
+         <span>Напоминать о повторяющихся операциях</span>
+         <button type="button" class="chart-chip ${on ? 'is-active' : ''}"
+                 onclick="opsRecToggle()">${on ? 'включено' : 'выключено'}</button>
+       </div>` : '';
+  el.innerHTML = sw + list.map(t =>
     String(t.id) === String(opsTplEditId) ? opsTplEditFormHTML(t) : opsTplRowHTML(t)
   ).join('');
 }
@@ -2902,7 +2979,9 @@ function opsTplRowHTML(t) {
   const catPart = cat ? `<span style="font-size:10px;color:var(--muted);">${escHtml(opsCatDisplay(cat))}</span>` : '';
   const itemsPart = (t.items && t.items.length)
     ? `<span style="font-size:9px;color:var(--muted2);">позиций: ${t.items.length}</span>` : '';
-  const meta = [typeTag, wayTag, amtPart, catPart, itemsPart].filter(Boolean).join(' ');
+  const rep = (typeof opsRecSchedule === 'function') ? opsRecSchedule(t) : null;
+  const repPart = rep ? `<span class="tag tpl-repeat-tag">↻ ${rep.day}-го числа</span>` : '';
+  const meta = [typeTag, wayTag, amtPart, catPart, itemsPart, repPart].filter(Boolean).join(' ');
   return `<div class="tpl-row" style="border-left-color:${borderColor}">
     <div style="flex:1;min-width:0;">
       <div class="tpl-row-name">${escHtml(t.name)}</div>
@@ -2958,6 +3037,16 @@ function opsTplEditFormHTML(t) {
       <input type="text" id="tpl-e-comment" value="${escHtml(t.comment || '')}" placeholder="Описание операции...">
     </div>
 
+    <div class="form-field">
+      <label>Повторять каждый месяц, число</label>
+      <input type="text" inputmode="numeric" id="tpl-e-repeat"
+             value="${t.repeat && t.repeat.day ? t.repeat.day : ''}" placeholder="не повторять">
+      <div class="budget-hint">
+        Приложение спросит при запуске, добавлять ли операцию. Само ничего не создаёт.
+        Пусто — повтора нет. Если в месяце такого числа нет, берётся последний день.
+      </div>
+    </div>
+
     <div class="tpl-edit-items">
       ${nItems
         ? `Позиции внутри шаблона: <b>${nItems}</b> — сохраняются как есть.
@@ -2999,6 +3088,17 @@ function opsTplSaveEdit(id) {
   t.amount    = (!rawAmt || isNaN(amt) || amt < 0) ? 0 : +amt.toFixed(2);
   t.cat       = document.getElementById('tpl-e-cat').value;
   t.comment   = (document.getElementById('tpl-e-comment')?.value || '').trim();
+
+  const repRaw = (document.getElementById('tpl-e-repeat')?.value || '').trim();
+  const repDay = parseInt(repRaw, 10);
+  if (!repRaw || isNaN(repDay) || repDay < 1 || repDay > 31) {
+    if (repRaw) { showInlineErr('tpl-e-repeat', 'Число от 1 до 31 или пусто'); return; }
+    delete t.repeat;
+  } else {
+    const was = t.repeat || {};
+    t.repeat = { day: repDay, enabled: true, lastDone: was.lastDone };
+  }
+
   t._editedAt = new Date().toISOString();   // без метки merge не выберет свежую версию
 
   opsState.templates = opsTpls();
@@ -3159,7 +3259,7 @@ function invRenderDiff() {
         if (dq === 0) continue;
         const dr = dq * nom * rate;
         rows += `<tr>
-          <td style="color:var(--muted);font-size:11px;">${sec.name}</td>
+          <td style="color:var(--muted);font-size:11px;">${escHtml(sec.name)}</td>
           <td style="font-size:11px;">${nom} ${sec.currency}</td>
           <td style="color:var(--muted)">${qB}</td>
           <td style="color:var(--muted)">${qA}</td>
@@ -3169,7 +3269,7 @@ function invRenderDiff() {
       }
     } else if (diff !== 0) {
       rows += `<tr>
-        <td style="color:var(--muted);font-size:11px;">${sec.name}</td>
+        <td style="color:var(--muted);font-size:11px;">${escHtml(sec.name)}</td>
         <td style="font-size:11px;">баланс</td>
         <td style="color:var(--muted)">${invFmt(valB)}</td>
         <td style="color:var(--muted)">${invFmt(valA)}</td>
@@ -3337,7 +3437,7 @@ function invRenderGoalSwatches() {
 function invOpenGoals() {
   const sel = document.getElementById('goal-currency');
   sel.innerHTML = invCurrencyList().map(c =>
-    `<option value="${c.code}">${c.code} — ${c.name}</option>`
+    `<option value="${escHtml(c.code)}">${escHtml(c.code)} — ${escHtml(c.name)}</option>`
   ).join('');
   invCancelEditGoal();
   invRenderGoalSwatches();
@@ -3772,7 +3872,7 @@ function invRenderGoalsList() {
       <div class="goal-card-header">
         <span class="goal-drag-handle" style="cursor:grab;color:var(--muted2);font-size:14px;padding:2px 8px 2px 0;flex-shrink:0;touch-action:none;">⠿</span>
         <div style="flex:1;min-width:0;">
-          <div class="goal-card-name">${g.name}${isDynamic?' <span style="font-size:8px;color:var(--muted2);">[тема]</span>':''}</div>
+          <div class="goal-card-name">${escHtml(g.name)}${isDynamic?' <span style="font-size:8px;color:var(--muted2);">[тема]</span>':''}</div>
           <div class="goal-card-target">Цель: ${fmtC(targetAmt)} ${targetCur}</div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:5px;flex-shrink:0;">
@@ -3812,7 +3912,7 @@ function invRenderGoalsDash() {
       <div class="goal-card" style="border-left:4px solid ${col};margin-bottom:8px;">
         <div class="goal-card-header">
           <div style="flex:1;min-width:0;">
-            <div class="goal-card-name">${g.name}</div>
+            <div class="goal-card-name">${escHtml(g.name)}</div>
             <div class="goal-card-target">${fmtC(targetAmt)} ${targetCur}</div>
           </div>
           <div class="goal-pct" style="color:${col}">${pct.toFixed(1)}%</div>
@@ -3885,7 +3985,7 @@ function invRenderRatesModalBody() {
         ${curList.map(c=>`
           <button class="btn btn-sm${base===c.code?' btn-primary':''}"
             onclick="invSetBaseCurrency('${c.code}');invRenderRatesModalBody();"
-            style="font-size:10px;">${c.code} — ${c.name}</button>`).join('')}
+            style="font-size:10px;">${escHtml(c.code)} — ${escHtml(c.name)}</button>`).join('')}
       </div>
     </div>
 
@@ -4159,7 +4259,12 @@ function opsCatImport(input) {
       const cats = JSON.parse(e.target.result);
       if (!Array.isArray(cats)) throw new Error('bad format');
       // confirm removed - sandbox incompatible
+      const now  = new Date().toISOString();
+      const kept = new Set(cats.map(c => String(c.id)));
+      opsAddCatTombstones(opsCats().map(c => c.id).filter(id => !kept.has(String(id))));
+      cats.forEach((c, i) => { if (c.ord === undefined) c.ord = i; c._editedAt = now; });
       opsState.categories = cats; opsSave(); opsCatConfigRender();
+      if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
     } catch(err) { showErr('Ошибка: ' + err.message); }
   };
   r.readAsText(file); input.value = '';
@@ -4281,6 +4386,9 @@ document.addEventListener('DOMContentLoaded', () => {
   invLoadRates();
   invRenderSidebar();
   invShowDashboard();
+
+  // Повторяющиеся платежи спрашиваем после отрисовки, чтобы диалог лёг поверх
+  if (typeof opsRecCheckOnStart === 'function') setTimeout(opsRecCheckOnStart, 400);
 });
 
 
