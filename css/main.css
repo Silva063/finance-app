@@ -632,10 +632,9 @@ select.filter-input option { background: var(--bg2); }
 .form-field { margin-bottom: 13px; }
 
 /* ── Мелочи ввода: чипы даты, кликабельные карточки ── */
-.date-chips {
-  display: inline-flex; gap: 4px; margin-left: 8px;
-  vertical-align: middle; text-transform: none; letter-spacing: 0;
-}
+/* Отдельной строкой под полем даты: внутри <label> подпись становилась
+   выше соседней и ломала выравнивание колонок в .form-row */
+.date-chips { display: flex; gap: 4px; margin-top: 5px; }
 .date-chip {
   padding: 2px 7px;
   border-radius: 999px;

@@ -167,8 +167,19 @@ t('карточка «Итог» сбрасывает', nodes['f1type'].value ==
 // ── разметка и интеграция ────────────────────────
 console.log('— разметка —');
 t('кнопки даты есть в форме', html.includes('id="m-date-today"') && html.includes('id="m-date-yesterday"'), 'нет кнопок');
-t('кнопка «И ещё» есть', html.includes('id="m-save-more-btn"'), 'нет кнопки');
-t('«И ещё» вызывает opsSaveOp(true)', html.includes('opsSaveOp(true)'), 'не передан флаг');
+// Внутри <label> чипы делали подпись выше соседней и ломали выравнивание
+// колонок в .form-row — проверяем, что они вне подписи.
+const dateField = html.slice(html.indexOf('<label>Дата'), html.indexOf('id="m-date-yesterday"'));
+t('чипы вынесены за пределы <label>',
+  dateField.indexOf('</label>') < dateField.indexOf('date-chips'),
+  'чипы снова внутри подписи — колонки съедут');
+t('чипы идут после поля ввода',
+  dateField.indexOf('id="m-date"') < dateField.indexOf('date-chips'),
+  'порядок неверный');
+t('подпись кнопки понятная',
+  html.includes('>Сохранить и добавить</button>'), 'подпись не обновлена');
+t('кнопка «Сохранить и добавить» есть', html.includes('id="m-save-more-btn"'), 'нет кнопки');
+t('кнопка вызывает opsSaveOp(true)', html.includes('opsSaveOp(true)'), 'не передан флаг');
 t('модуль подключён после app.js',
   html.indexOf('js/inputaid.js') > html.indexOf('js/app.js'), 'порядок неверный');
 
@@ -177,7 +188,7 @@ t('opsSaveOp принимает keepOpen', /function opsSaveOp\(keepOpen\)/.test
 t('при keepOpen форма не закрывается',
   app.includes('if (keepOpen) opsPrepareNextOp(); else opsCloseModal();'), 'ветка не найдена');
 t('есть подготовка к следующей операции', app.includes('function opsPrepareNextOp()'), 'нет функции');
-t('«И ещё» скрывается при правке операции',
+t('кнопка скрывается при правке операции',
   app.includes("moreBtnE.style.display = 'none'"), 'не скрывается');
 t('три карточки кликабельны, четвёртая нет',
   (app.match(/stat-card is-clickable/g) || []).length === 3,
