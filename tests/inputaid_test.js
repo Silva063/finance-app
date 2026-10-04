@@ -157,20 +157,51 @@ t('есть «Сохранить и закрыть»',  html.includes('>Сохр
 t('есть «Сохранить и добавить»', html.includes('>Сохранить и добавить</button>'), 'нет кнопки');
 t('есть «Отмена»',               html.includes('>Отмена</button>'),               'нет кнопки');
 const footer = html.slice(html.indexOf('id="m-del-btn"'), html.indexOf('id="m-del-btn"') + 700);
-t('порядок: закрыть → добавить → отмена',
-  footer.indexOf('Сохранить и закрыть') < footer.indexOf('Сохранить и добавить')
-  && footer.indexOf('Сохранить и добавить') < footer.indexOf('>Отмена<'),
+t('порядок: отмена → добавить → закрыть',
+  footer.indexOf('>Отмена<') < footer.indexOf('Сохранить и добавить')
+  && footer.indexOf('Сохранить и добавить') < footer.indexOf('Сохранить и закрыть'),
   'порядок не тот');
+t('«Сохранить и закрыть» крайняя справа',
+  footer.lastIndexOf('Сохранить и закрыть') > footer.indexOf('Сохранить и добавить')
+  && footer.lastIndexOf('Сохранить и закрыть') > footer.indexOf('>Отмена<'),
+  'не крайняя');
 t('«Сохранить и закрыть» — основное действие',
-  html.includes('class="btn btn-primary" onclick="opsSaveOp()">Сохранить и закрыть'), 'не primary');
+  html.includes('class="btn btn-primary" id="m-save-btn" onclick="opsSaveOp()">Сохранить и закрыть'), 'не primary');
+t('у всех кнопок подвала есть id для управления порядком',
+  ['m-del-btn','m-cancel-btn','m-save-more-btn','m-save-btn'].every(id => html.includes(`id="${id}"`)),
+  'не у всех');
 
-// На телефоне подписи длинные — кнопки должны идти столбиком, а не сжиматься
-t('на мобильном кнопки формы операции столбиком',
-  css.includes('#ops-modal .modal-actions { flex-direction: column'), 'правило не найдено');
+// ── раскладка подвала ────────────────────────────
+console.log('— раскладка подвала —');
+t('на ПК всё в одну строку (переноса нет)',
+  css.includes('#ops-modal .modal-actions { flex-wrap: nowrap; }'), 'перенос не отключён');
+t('уплотнение кнопок только для широкого экрана',
+  /@media \(min-width: 1025px\) \{\s*\n\s*#ops-modal \.modal-actions \.btn \{ padding/.test(css),
+  'уплотнение не ограничено min-width — перебьёт мобильные отступы');
+t('на мобильном кнопки столбиком',
+  css.includes('flex-direction: column'), 'правило не найдено');
+
+// Главная ловушка: column вместе с wrap раскладывает кнопки в несколько
+// колонок, и они наезжают друг на друга. Внутри мобильного блока обязателен nowrap.
+// файл в CRLF — нормализуем, иначе поиск по \n ничего не находит
+const cssN = css.replace(/\r\n/g, '\n');
+const mob = cssN.slice(cssN.indexOf('@media (max-width: 1024px) {\n  /* Только подвал формы операции'));
+const mobBlock = mob.slice(0, mob.indexOf('\n}\n'));
+t('в мобильном блоке column соседствует с nowrap',
+  mobBlock.includes('flex-direction: column') && mobBlock.includes('flex-wrap: nowrap'),
+  'column без nowrap — кнопки наедут друг на друга');
+t('порядок сверху вниз задан явно',
+  ['m-save-btn','m-save-more-btn','m-cancel-btn','m-del-btn'].every(id => mobBlock.includes('#' + id)),
+  'порядок не задан');
 t('правило не задевает остальные модалки',
   !css.includes('.modal-actions .btn { flex: 1'), 'общее правило всё ещё сжимает все модалки');
 t('подписи не ломаются посередине слова',
   css.includes('#ops-modal .modal-actions .btn { white-space: nowrap; }'), 'нет nowrap');
+
+// Подписи должны уместиться в 388px (440 модалки − 52 отступов) при 10.5px моно
+const labels = ['Отмена', 'Сохранить и добавить', 'Сохранить и закрыть'];
+const widthPx = labels.reduce((a, l) => a + l.length * 6.3 + 22, 0) + 2 * 8;
+t(`три кнопки влезают в строку (расчётно ${Math.round(widthPx)}px из 388)`, widthPx < 388, Math.round(widthPx));
 
 t('кнопка добавления есть', html.includes('id="m-save-more-btn"'), 'нет кнопки');
 t('кнопка вызывает opsSaveOp(true)', html.includes('opsSaveOp(true)'), 'не передан флаг');
