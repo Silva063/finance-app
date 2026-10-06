@@ -196,6 +196,26 @@ const mkTpl = (id, name, over) => ({ id, name, type:'expense', way:'Безнал
   const m5 = T.merge(legacy, legacy);
   t('merge не падает без шаблонов', Array.isArray(m5.templates) && m5.templates.length === 0, JSON.stringify(m5.templates));
 
+  console.log('\n— раскладка строки на узком экране —');
+  {
+    const css = fs.readFileSync(ROOT + 'css/main.css', 'utf8').replace(/\r\n/g, '\n');
+    const appSrc = fs.readFileSync(ROOT + 'js/app.js', 'utf8');
+    t('текстовая часть вынесена в класс, а не инлайн',
+      appSrc.includes('<div class="tpl-row-main">'), 'всё ещё инлайн-стили');
+    // Кнопки с flex:1 делили ширину с текстом наравне — от названия и
+    // комментария на телефоне почти ничего не оставалось.
+    t('кнопки больше не конкурируют с текстом',
+      !css.includes('.tpl-row .btn { flex: 1; }'), 'вернулось flex: 1');
+    const mob = css.slice(css.indexOf('  .tpl-row { flex-wrap: wrap;'));
+    const block = mob.slice(0, mob.indexOf('\n}'));
+    t('на телефоне текст занимает всю ширину',
+      block.includes('.tpl-row-main { flex: 1 1 100%; }'), block.slice(0, 120));
+    t('иконочные кнопки по содержимому',
+      block.includes('.tpl-row .btn { flex: 0 0 auto; }'), 'нет правила');
+    t('«Применить» занимает остаток строки',
+      block.includes('.tpl-row .btn-primary { flex: 1 1 auto; }'), 'нет правила');
+  }
+
   console.log('\n— экранирование —');
   state = { txns:[], templates:[ mkTpl('tpl_1','<b>Жирный</b>', { comment:'цена < 100 & "кавычки"' }) ] };
   const row = T.rowHTML(T.find('tpl_1'));

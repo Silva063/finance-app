@@ -161,6 +161,21 @@ R.check(); R.later();
 t('«Позже» не отмечает месяц', state.templates[0].repeat.lastDone === undefined, state.templates[0].repeat.lastDone);
 t('и спросит при следующем запуске', R.due('2026-10-15').length === 1, R.due('2026-10-15').length);
 
+console.log('\n— раскладка строки на узком экране —');
+{
+  const css = fs.readFileSync(ROOT + 'css/main.css', 'utf8').replace(/\r\n/g, '\n');
+  t('текстовая часть вынесена в класс', src.includes('<div class="rec-row-main">'), 'всё ещё инлайн');
+  // Та же ошибка, что была в списке шаблонов: кнопки с flex:1 отбирали
+  // ширину у названия и суммы.
+  t('кнопки не конкурируют с текстом', !css.includes('.rec-row .btn { flex: 1; }'), 'вернулось flex: 1');
+  const mob = css.slice(css.indexOf('  .rec-row { flex-wrap: wrap;'));
+  const block = mob.slice(0, mob.indexOf('\n}'));
+  t('на телефоне текст занимает всю ширину',
+    block.includes('.rec-row-main { flex: 1 1 100%; }'), block.slice(0, 120));
+  t('«Добавить» и «Пропустить» делят вторую строку пополам',
+    block.includes('.rec-row .btn { flex: 1 1 0; }'), 'нет правила');
+}
+
 console.log('\n— ничего не ожидается —');
 setup([ tpl('t1','Аренда',1, { lastDone:'2099-12' }) ]);
 R.check();

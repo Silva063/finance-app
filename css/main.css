@@ -681,6 +681,12 @@ select.filter-input option { background: var(--bg2); }
   background: var(--bg3); border-radius: var(--radius-sm);
   border-left: 3px solid var(--acc);
 }
+/* Текстовая часть строки — отдельным классом, чтобы ею можно было управлять
+   из CSS. На узком экране она занимает всю ширину, а кнопки уходят на вторую
+   строку: раньше кнопки с flex:1 делили ширину с текстом наравне, и от
+   названия с комментарием почти ничего не оставалось. */
+.tpl-row-main, .rec-row-main { flex: 1; min-width: 0; }
+
 .rec-row-name {
   font-size: 12px; font-weight: 500; margin-bottom: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -696,8 +702,9 @@ select.filter-input option { background: var(--bg2); }
   font-size: 10px; color: var(--muted2);
 }
 @media (max-width: 1024px) {
-  .rec-row { flex-wrap: wrap; }
-  .rec-row .btn { flex: 1; }
+  .rec-row { flex-wrap: wrap; row-gap: 8px; }
+  .rec-row-main { flex: 1 1 100%; }      /* текст на всю ширину */
+  .rec-row .btn { flex: 1 1 0; }         /* кнопки — второй строкой, пополам */
 }
 
 /* ── Шаблоны операций: строка и форма правки ────── */
@@ -738,8 +745,10 @@ select.filter-input option { background: var(--bg2); }
 .tpl-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
 @media (max-width: 1024px) {
-  .tpl-row { flex-wrap: wrap; }
-  .tpl-row .btn { flex: 1; }
+  .tpl-row { flex-wrap: wrap; row-gap: 8px; }
+  .tpl-row-main { flex: 1 1 100%; }          /* текст на всю ширину */
+  .tpl-row .btn { flex: 0 0 auto; }          /* ✎ и ✕ — по содержимому */
+  .tpl-row .btn-primary { flex: 1 1 auto; }  /* «Применить» занимает остаток */
   .tpl-edit-grid { grid-template-columns: 1fr 1fr; }
 }
 

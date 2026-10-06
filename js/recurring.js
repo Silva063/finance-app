@@ -152,7 +152,7 @@ function opsRecRenderModal() {
     const sign = d.type === 'income' ? '+' : '−';
     const col  = d.type === 'income' ? 'var(--green)' : 'var(--red)';
     return `<div class="rec-row">
-      <div style="flex:1;min-width:0;">
+      <div class="rec-row-main">
         <div class="rec-row-name">${escHtml(d.name)}</div>
         <div class="rec-row-meta">
           <span>${fmtDate(d.date)}</span>

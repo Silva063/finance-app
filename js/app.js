@@ -3010,7 +3010,7 @@ function opsTplRowHTML(t) {
   const repPart = rep ? `<span class="tag tpl-repeat-tag">↻ ${rep.day}-го числа</span>` : '';
   const meta = [typeTag, wayTag, amtPart, catPart, itemsPart, repPart].filter(Boolean).join(' ');
   return `<div class="tpl-row" style="border-left-color:${borderColor}">
-    <div style="flex:1;min-width:0;">
+    <div class="tpl-row-main">
       <div class="tpl-row-name">${escHtml(t.name)}</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${meta}</div>
       ${t.comment ? `<div class="tpl-row-comment">${escHtml(t.comment)}</div>` : ''}
