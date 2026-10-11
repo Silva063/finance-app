@@ -62,7 +62,7 @@ console.log('— нулевая сумма —');
 t('есть предупреждение при пустой сумме',
   /if \(!rawAmt\) showWarn\(/.test(app), 'предупреждения нет');
 t('операция всё равно сохраняется (не блокируем)',
-  app.indexOf('if (!rawAmt) showWarn(') < app.indexOf('opsState.txns.push({ id: opsGenId(), date, type, way, amount'),
+  app.indexOf('if (!rawAmt) showWarn(') < app.indexOf('opsState.txns.push({ id: opsGenId(), date, type, way, account, amount'),
   'предупреждение стоит после сохранения');
 
 // ── экранирование ────────────────────────────────

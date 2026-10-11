@@ -45,6 +45,10 @@
    RESET & BASE
 ══════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Атрибут hidden должен скрывать всегда. Иначе любой класс с display
+   (grid, flex) его перебивает — так уже было с панелью графика, значком
+   «авто» и строкой перевода в форме операции. */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   background: var(--bg);
@@ -661,6 +665,79 @@ select.filter-input option { background: var(--bg2); }
   #ops-modal #m-cancel-btn    { order: 3; }
   #ops-modal #m-del-btn       { order: 9; }
 }
+
+/* ── Счета и переводы ───────────────────────────── */
+.tag-transfer {
+  border-color: var(--acc) !important;
+  color: var(--acc2) !important;
+  background: var(--acc-glow);
+}
+.tag-acc {
+  border-color: var(--line2) !important;
+  color: var(--muted) !important;
+  white-space: nowrap;
+}
+.amt-transfer { color: var(--muted); }
+.amt-fee { font-size: 10px; color: var(--red); white-space: nowrap; }
+
+.acc-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; margin-bottom: 5px;
+  background: var(--bg3); border-radius: var(--radius-sm);
+}
+.acc-row.is-archived { opacity: .55; }
+.acc-row-order { display: flex; flex-direction: column; }
+.acc-row-order .row-edit-btn { padding: 0 6px; font-size: 10px; line-height: 1.2; }
+.acc-row-order .row-edit-btn:disabled { opacity: .25; cursor: default; }
+.acc-row-name { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
+.acc-row-kind { width: auto; flex: 0 0 auto; font-size: 11px; padding: 6px 6px; }
+.acc-row-bal {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  min-width: 80px; text-align: right; white-space: nowrap;
+}
+.acc-row .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+@media (max-width: 1024px) {
+  .acc-row { flex-wrap: wrap; row-gap: 6px; }
+  .acc-row-name { flex: 1 1 60%; }
+  .acc-row-bal { flex: 1 1 auto; text-align: left; }
+}
+
+/* ── Валюты ─────────────────────────────────────── */
+/* вторая строка под суммой: пересчёт в базовую или курс обмена */
+.amt-sub {
+  display: block;
+  font-size: 9.5px; font-weight: 400;
+  color: var(--muted2);
+  white-space: nowrap;
+}
+.amt-sub.is-warn { color: var(--amber); }
+.fx-preview {
+  margin: -6px 0 12px;
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--acc2);
+}
+.acc-row-cur { width: auto; flex: 0 0 auto; font-size: 11px; padding: 6px 6px; }
+.acc-row-cur:disabled { opacity: .55; cursor: not-allowed; }
+
+.cur-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; margin-bottom: 5px;
+  background: var(--bg3); border-radius: var(--radius-sm);
+}
+.cur-row-code {
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  min-width: 42px; color: var(--text);
+}
+.cur-row-name { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
+.cur-row-badge {
+  font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--acc-glow); border: 1px solid var(--acc); color: var(--acc2);
+}
+.cur-row .btn:disabled { opacity: .35; cursor: not-allowed; }
+.cur-add { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.cur-add .filter-input { flex: 1 1 110px; min-width: 0; }
 
 /* ── Повторяющиеся операции ─────────────────────── */
 .tpl-rec-switch {

@@ -3,6 +3,7 @@ const fs = require('fs'), vm = require('vm');
 const path = require('path');
 const ROOT = path.join(__dirname, '..') + path.sep;
 const src = fs.readFileSync(ROOT + 'js/recurring.js', 'utf8');
+const accSrc = fs.readFileSync(ROOT + 'js/accounts.js', 'utf8');   // счета и переводы
 
 let state = { txns: [], templates: [], recurring: null };
 const nodes = {};
@@ -31,7 +32,7 @@ const ctx = vm.createContext({
   document: { getElementById: id => nodes[id] || null },
   console:{log(){}}, Math, JSON, Date, Array, Object, String, Number, Set, isNaN, parseInt
 });
-vm.runInContext(src + `
+vm.runInContext(accSrc + '\n' + src + `
 ;globalThis.__r = {
   due: opsRecDue, add: opsRecAdd, skip: opsRecSkip, dateFor: opsRecDateFor,
   sched: opsRecSchedule, enabled: opsRecEnabled, toggle: opsRecToggle,

@@ -407,6 +407,38 @@ function _mergeOps(local, remote) {
     return ao - bo;
   });
 
+  // Счета — по тому же образцу, что категории: по id по _editedAt, удалённые —
+  // надгробиями, порядок — полем ord. Внутри settingsSrc переименование счёта
+  // на одном устройстве терялось бы так же, как терялись цели.
+  const accRes = _mergeById(local.accounts, remote.accounts, {
+    localTombs:  local.accPurged,
+    remoteTombs: remote.accPurged
+  });
+  const accounts = accRes.items.slice().sort((a, b) => {
+    const ao = Number.isFinite(a.ord) ? a.ord : 1e9;
+    const bo = Number.isFinite(b.ord) ? b.ord : 1e9;
+    return ao - bo;
+  });
+
+  // Валюты — по id (коду) с надгробиями; базовая валюта — по своей метке,
+  // а не внутри settingsSrc, иначе её смена на одном устройстве терялась бы.
+  const curRes = _mergeById(local.currencies, remote.currencies, {
+    localTombs:  local.curPurged,
+    remoteTombs: remote.curPurged
+  });
+  const currencies = curRes.items.slice().sort((a, b) => {
+    const ao = Number.isFinite(a.ord) ? a.ord : 1e9;
+    const bo = Number.isFinite(b.ord) ? b.ord : 1e9;
+    return ao - bo;
+  });
+  let fxCfg;
+  const lf = local.fxCfg, rf = remote.fxCfg;
+  if (lf || rf) {
+    const lft = new Date((lf && lf._editedAt) || 0).getTime();
+    const rft = new Date((rf && rf._editedAt) || 0).getTime();
+    fxCfg = lft >= rft ? (lf || rf) : (rf || lf);
+  }
+
   // nextId kept for backward compat with old numeric ids
   const maxNumericId = merged.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
   const nextId = Math.max(
@@ -426,6 +458,11 @@ function _mergeOps(local, remote) {
     tplPurged: tplRes.purged,
     ...(categories.length ? { categories } : {}),
     catPurged: catRes.purged,
+    ...(accounts.length ? { accounts } : {}),
+    accPurged: accRes.purged,
+    ...(currencies.length ? { currencies } : {}),
+    curPurged: curRes.purged,
+    ...(fxCfg ? { fxCfg } : {}),
     ...(budget ? { budget } : {}),
     ...(recurring ? { recurring } : {}),
     _lastModified: new Date().toISOString(),

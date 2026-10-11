@@ -4,6 +4,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..') + path.sep;
 const app   = fs.readFileSync(ROOT + 'js/app.js', 'utf8');
 const drive = fs.readFileSync(ROOT + 'js/drive.js', 'utf8');
+const accSrc = fs.readFileSync(ROOT + 'js/accounts.js', 'utf8');   // счета и переводы
 
 const _tplEnd = app.indexOf('   БЫСТРЫЙ ВВОД');
 const tplSrc = app.slice(app.indexOf('function opsTpls()'), app.lastIndexOf('/*', _tplEnd));
@@ -18,7 +19,7 @@ const mkEl = id => ({ id, value:'', textContent:'', innerHTML:'', style:{},
   focus(){}, classList:{ _s:new Set(), add(c){this._s.add(c)}, remove(c){this._s.delete(c)},
     contains(c){return this._s.has(c)} }, children:[], querySelector(){ return null; },
   closest(){ return null; } });
-for (const id of ['tpl-list','tpl-modal','ops-modal','ops-modal-title','m-date','m-type','m-way',
+for (const id of ['tpl-list','tpl-modal','ops-modal','ops-modal-title','m-date','m-type','m-acc',
                   'm-amt','m-comment','m-cat','m-del-btn','m-items-list']) fields[id] = mkEl(id);
 
 let confirmAnswer = true, promptAnswer = null, toasts = [];
@@ -45,7 +46,7 @@ const ctx = vm.createContext({
   document: { getElementById: id => fields[id] || null },
   console:{log(){}}, Math, JSON, Date, Array, Object, String, Number, Set, Map, isNaN, parseFloat
 });
-vm.runInContext(mergeSrc + '\n' + tplSrc + `
+vm.runInContext(accSrc + '\n' + mergeSrc + '\n' + tplSrc + `
 ;globalThis.__t = {
   all: opsTpls, purged: opsTplsPurged, find: opsTplFind,
   render: opsTplRender, rowHTML: opsTplRowHTML, formHTML: opsTplEditFormHTML,
@@ -73,7 +74,7 @@ const mkTpl = (id, name, over) => ({ id, name, type:'expense', way:'Безнал
 
   fields['tpl-e-name']    = mkEl('tpl-e-name');    fields['tpl-e-name'].value = 'Продукты неделя';
   fields['tpl-e-type']    = mkEl('tpl-e-type');    fields['tpl-e-type'].value = 'expense';
-  fields['tpl-e-way']     = mkEl('tpl-e-way');     fields['tpl-e-way'].value = 'Наличный';
+  fields['tpl-e-acc']     = mkEl('tpl-e-acc');     fields['tpl-e-acc'].value = 'cash';
   fields['tpl-e-amt']     = mkEl('tpl-e-amt');     fields['tpl-e-amt'].value = '1 480,50'.replace(' ','');
   fields['tpl-e-cat']     = mkEl('tpl-e-cat');     fields['tpl-e-cat'].value = 'cafe';
   fields['tpl-e-comment'] = mkEl('tpl-e-comment'); fields['tpl-e-comment'].value = 'Зелёный двор';
@@ -84,7 +85,8 @@ const mkTpl = (id, name, over) => ({ id, name, type:'expense', way:'Безнал
   t('новых шаблонов не появилось', T.all().length === 1, T.all().length);
   t('id сохранён', tpl.id === 'tpl_1', tpl.id);
   t('название изменено', tpl.name === 'Продукты неделя', tpl.name);
-  t('способ изменён', tpl.way === 'Наличный', tpl.way);
+  t('счёт изменён', tpl.account === 'cash', tpl.account);
+  t('способ для совместимости выведен из счёта', tpl.way === 'Наличный', tpl.way);
   t('сумма разобрана с запятой', tpl.amount === 1480.5, tpl.amount);
   t('категория изменена', tpl.cat === 'cafe', tpl.cat);
   t('комментарий изменён', tpl.comment === 'Зелёный двор', tpl.comment);
@@ -130,7 +132,7 @@ const mkTpl = (id, name, over) => ({ id, name, type:'expense', way:'Безнал
 
   console.log('\n— сохранение из формы операции: имя занято —');
   state = { txns:[], templates:[ mkTpl('tpl_1','Продукты') ] };
-  fields['m-type'].value = 'expense'; fields['m-way'].value = 'Наличный';
+  fields['m-type'].value = 'expense'; fields['m-acc'].value = 'cash';
   fields['m-amt'].value = '999'; fields['m-comment'].value = 'новый коммент';
   fields['m-cat'].value = 'cafe';
   promptAnswer = 'Продукты'; confirmAnswer = true; toasts = [];

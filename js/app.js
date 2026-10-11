@@ -247,19 +247,30 @@ function getYears() {
 }
 function txnsByMonth(ym) { return opsState.txns.filter(t => !t._deleted && t.date.slice(0, 7) === ym); }
 
+// Сумма операции в базовой валюте. Для операций в базовой валюте это
+// ровно t.amount, поэтому для старых рублёвых данных ничего не меняется.
+function opsStatAmt(t) {
+  return (typeof opsBaseAmount === 'function') ? opsBaseAmount(t) : (+t.amount || 0);
+}
+
+// Перевод между счетами не приход и не расход: его amount хранится как
+// −комиссия, поэтому в расход попадает ровно комиссия, а без неё — ноль.
+// Всё считается в базовой валюте.
 function calcSummary(txns) {
-  let income=0, expense=0, cashIn=0, cashEx=0, cardIn=0, cardEx=0;
+  let income = 0, expense = 0, transfers = 0, fees = 0;
   for (const t of txns) {
-    const a = t.amount;
-    if (t.type === 'income') { income += a; t.way === 'Наличный' ? (cashIn += a) : (cardIn += a); }
-    else                     { expense += a; t.way === 'Наличный' ? (cashEx += a) : (cardEx += a); }
+    const a = opsStatAmt(t);
+    if (t.type === 'income') income += a;
+    else {
+      expense += a;
+      if (t.type === 'transfer') { transfers++; fees += -a; }
+    }
   }
-  return { income, expense, cashIn, cashEx, cardIn, cardEx,
-           net: income + expense, cashNet: cashIn + cashEx, cardNet: cardIn + cardEx };
+  return { income, expense, net: income + expense, transfers, fees };
 }
 
 // ── Navigation ────────────────────────────────────
-const OPS_PAGES = ['op-p1','op-p2','op-p5','op-p3','op-p4','op-p6','op-p7'];
+const OPS_PAGES = ['op-p1','op-acc','op-p3','op-p4','op-p6','op-p7'];
 function opsNav(id) {
   document.querySelectorAll('#app-ops .page').forEach(p => p.classList.remove('is-active'));
   document.querySelectorAll('#app-ops .sidebar-nav-item').forEach(n => n.classList.remove('is-active'));
@@ -268,8 +279,7 @@ function opsNav(id) {
   if (idx >= 0) document.querySelectorAll('#app-ops .sidebar-nav-item')[idx].classList.add('is-active');
   opsCurPage = id;
   if (id === 'op-p1') renderP1();
-  if (id === 'op-p2') renderP2();
-  if (id === 'op-p5') renderP5();
+  if (id === 'op-acc') renderAccounts();
   if (id === 'op-p3') renderP3();
   if (id === 'op-p4') renderP4();
   if (id === 'op-p6') renderP6();
@@ -280,8 +290,7 @@ function opsNav(id) {
 }
 function opsReRenderCurrent() {
   if (opsCurPage === 'op-p1') renderP1();
-  else if (opsCurPage === 'op-p2') renderP2();
-  else if (opsCurPage === 'op-p5') renderP5();
+  else if (opsCurPage === 'op-acc') renderAccounts();
   else if (opsCurPage === 'op-p3') renderP3();
   else if (opsCurPage === 'op-p4') renderP4();
   else if (opsCurPage === 'op-p6') renderP6();
@@ -313,8 +322,6 @@ function opsResetP1() {
   });
   renderP1();
 }
-function opsResetP2() { document.getElementById('f2search').value = ''; document.getElementById('f2year').value = ''; document.getElementById('f2month').value = ''; renderP2(); }
-function opsResetP5() { document.getElementById('f5search').value = ''; document.getElementById('f5year').value = ''; document.getElementById('f5month').value = ''; renderP5(); }
 function opsResetP3() { document.getElementById('f3year').value = ''; renderP3(); }
 
 // ── Page 1 — All ──────────────────────────────────
@@ -328,6 +335,13 @@ function renderP1() {
       '<option value="__none__"' + (cur==='__none__'?' selected':'') + '>— без категории</option>' +
       opsCats().map(c => `<option value="${c.id}" ${c.id===cur?'selected':''}>${opsCatDisplay(c)}</option>`).join('');
   }
+  // фильтр по счёту (поле f1way исторически называлось «способом»)
+  const f1acc = document.getElementById('f1way');
+  if (f1acc) {
+    const curAcc = f1acc.value;
+    f1acc.innerHTML = '<option value="">Все счета</option>' +
+      opsAccounts().map(a => `<option value="${escHtml(a.id)}" ${a.id===curAcc?'selected':''}>${escHtml(a.name)}${a.archived?' (архив)':''}</option>`).join('');
+  }
   const search = document.getElementById('f1search').value.toLowerCase();
   const type  = document.getElementById('f1type').value;
   const way   = document.getElementById('f1way').value;
@@ -337,7 +351,7 @@ function renderP1() {
 
   let txns = opsState.txns.filter(t => !t._deleted);
   if (type)     txns = txns.filter(t => t.type === type);
-  if (way)      txns = txns.filter(t => t.way === way);
+  if (way)      txns = txns.filter(t => opsTxnTouches(t, way));
   if (f1catVal === '__none__') txns = txns.filter(t => !t.cat);
   else if (f1catVal) txns = txns.filter(t => (t.cat||'') === f1catVal);
   if (month)    txns = txns.filter(t => t.date.startsWith(month));
@@ -353,7 +367,13 @@ function renderP1() {
     <div class="stat-card is-clickable ${type==='income'?'is-active':''}" onclick="opsStatFilterType('income')" title="Показать только приходы"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.income)}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='income').length} операций</div></div>
     <div class="stat-card is-clickable ${type==='expense'?'is-active':''}" onclick="opsStatFilterType('expense')" title="Показать только расходы"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.expense))}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='expense').length} операций</div></div>
     <div class="stat-card is-clickable ${!type?'is-active':''}" onclick="opsStatFilterType('')" title="Показать все типы"><div class="stat-card-label">Итог</div><div class="stat-card-value ${s.net>=0?'is-pos':'is-neg'}">${fmtAmt(s.net,true)}</div><div class="stat-card-sub">${txns.length} всего</div></div>
-    <div class="stat-card"><div class="stat-card-label">Безнал / Нал итог</div><div class="stat-card-value is-neu" style="font-size:13px">${fmtAmt(s.cardNet,true)}</div><div class="stat-card-sub">Нал: ${fmtAmt(s.cashNet,true)}</div></div>`;
+    ${(() => {
+      const accs = opsActiveAccounts();
+      const tb   = opsAccountsTotalBase();
+      const sub  = tb.missing.length ? `без ${tb.missing.join(', ')} — нет курса`
+                 : `${accs.length} ${opsPlural(accs.length,'счёт','счёта','счетов')} · подробнее`;
+      return `<div class="stat-card is-clickable" onclick="opsNav('op-acc')" title="Открыть счета"><div class="stat-card-label">На счетах</div><div class="stat-card-value ${tb.total>=0?'is-pos':'is-neg'}">${fmtAmt(tb.total,true)}</div><div class="stat-card-sub">${sub}</div></div>`;
+    })()}`;
 
   document.getElementById('p1count').textContent = `${txns.length} операций`;
   opsBudgetRenderP1();
@@ -380,12 +400,12 @@ function renderP1() {
       return `<tr data-txnid="${t.id}">
       <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
       <td><div class="txn-tags">
-        <span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span>
-        <span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span>
+        ${opsTxnTypeTag(t)}
+        ${opsTxnAccTag(t)}
         ${expandBtn}
       </div></td>
       ${catCell}
-      <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount,true)}</td>
+      <td style="font-weight:500;white-space:nowrap">${opsTxnAmountHTML(t)}</td>
       <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
       <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
     </tr>`;
@@ -410,8 +430,8 @@ function renderP1() {
   const filtMonths = year ? allMonths.filter(m => m.startsWith(year)) : allMonths;
   c1Data = {
     months : filtMonths,
-    income : filtMonths.map(m => +(txnsByMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)).toFixed(2)),
-    expense: filtMonths.map(m => +(Math.abs(txnsByMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0))).toFixed(2))
+    income : filtMonths.map(m => +(txnsByMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+opsStatAmt(t),0)).toFixed(2)),
+    expense: filtMonths.map(m => +(Math.abs(txnsByMonth(m).filter(t=>t.type!=='income').reduce((s,t)=>s+opsStatAmt(t),0))).toFixed(2))
   };
   c1SyncControls();
   c1Render();
@@ -765,86 +785,6 @@ window.addEventListener('resize', () => {
   }, 180);
 });
 
-// ── Page 2 — Beznal ───────────────────────────────
-function renderP2() {
-  fillYearSel('f2year'); fillMonthSel('f2month', 'f2year');
-  const search = document.getElementById('f2search').value.toLowerCase();
-  const year   = document.getElementById('f2year').value;
-  const month  = document.getElementById('f2month').value;
-
-  let txns = opsState.txns.filter(t => !t._deleted && t.way === 'Безналичный');
-  if (month)  txns = txns.filter(t => t.date.startsWith(month));
-  else if (year) txns = txns.filter(t => t.date.startsWith(year));
-  if (search) txns = txns.filter(t =>
-    (t.comment||'').toLowerCase().includes(search) ||
-    (t.items||[]).some(i => (i.name||'').toLowerCase().includes(search))
-  );
-
-  const s = calcSummary(txns);
-  const totalBeznal = opsState.txns.filter(t => !t._deleted && t.way === 'Безналичный').reduce((a,t) => a+t.amount, 0);
-
-  document.getElementById('p2stats').innerHTML = `
-    <div class="stat-card"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.cardIn)}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.cardEx))}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Итог за период</div><div class="stat-card-value ${s.cardNet>=0?'is-pos':'is-neg'}">${fmtAmt(s.cardNet,true)}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Всего (= е-кошелёк)</div><div class="stat-card-value ${totalBeznal>=0?'is-pos':'is-neg'}">${fmtAmt(totalBeznal,true)}</div></div>`;
-
-  document.getElementById('p2count').textContent = `${txns.length} операций`;
-
-  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
-  let run = 0;
-  const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
-
-  document.getElementById('p2body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
-    <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
-    <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
-    <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
-    <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
-    <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
-    <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
-  </tr>`).join('');
-}
-
-// ── Page 5 — Cash ─────────────────────────────────
-function renderP5() {
-  fillYearSel('f5year'); fillMonthSel('f5month', 'f5year');
-  const search = document.getElementById('f5search').value.toLowerCase();
-  const year   = document.getElementById('f5year').value;
-  const month  = document.getElementById('f5month').value;
-
-  let txns = opsState.txns.filter(t => !t._deleted && t.way === 'Наличный');
-  if (month)  txns = txns.filter(t => t.date.startsWith(month));
-  else if (year) txns = txns.filter(t => t.date.startsWith(year));
-  if (search) txns = txns.filter(t =>
-    (t.comment||'').toLowerCase().includes(search) ||
-    (t.items||[]).some(i => (i.name||'').toLowerCase().includes(search))
-  );
-
-  const s = calcSummary(txns);
-  const totalCash = opsState.txns.filter(t => !t._deleted && t.way === 'Наличный').reduce((a,t) => a+t.amount, 0);
-
-  document.getElementById('p5stats').innerHTML = `
-    <div class="stat-card"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.cashIn)}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.cashEx))}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Итог за период</div><div class="stat-card-value ${s.cashNet>=0?'is-pos':'is-neg'}">${fmtAmt(s.cashNet,true)}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Всего (= факт. нал)</div><div class="stat-card-value ${totalCash>=0?'is-pos':'is-neg'}">${fmtAmt(totalCash,true)}</div></div>`;
-
-  document.getElementById('p5count').textContent = `${txns.length} операций`;
-
-  const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
-  let run = 0;
-  const withRun = sorted.map(t => { run += t.amount; return { ...t, run }; });
-
-  document.getElementById('p5body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
-    <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
-    <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
-    <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500">${fmtAmt(t.amount,true)}</td>
-    <td style="color:var(--muted);font-size:11px">${fmtAmt(t.run,true)}</td>
-    <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
-    <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
-  </tr>`).join('');
-}
-
 // ── Page 3 — By month ─────────────────────────────
 function renderP3() {
   fillYearSel('f3year');
@@ -864,14 +804,14 @@ function renderP3() {
     let dayRows = '';
     for (const day of Object.keys(byDay).sort().reverse()) {
       const dayTxns = byDay[day];
-      const daySum  = dayTxns.reduce((a,t) => a+t.amount, 0);
+      const daySum  = dayTxns.reduce((a,t) => a+opsStatAmt(t), 0);
       const dt      = new Date(day + 'T12:00:00');
       dayRows += `<div class="day-label">${DAYS_SHORT[dt.getDay()]} ${dt.getDate()} ${MONTHS_RU_GEN[dt.getMonth()]} — итог: <span style="color:${daySum>=0?'var(--green)':'var(--red)'}">${fmtAmt(daySum,true)}</span></div>`;
       dayRows += dayTxns.map(t => `
         <div class="txn-row-inline" data-txnid="${t.id}">
-          <span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span>
-          <span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span>
-          <span class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;font-size:12px;min-width:88px;flex-shrink:0">${fmtAmt(t.amount,true)}</span>
+          ${opsTxnTypeTag(t)}
+          ${opsTxnAccTag(t)}
+          <span style="font-weight:500;font-size:12px;min-width:88px;flex-shrink:0">${opsTxnAmountHTML(t)}</span>
           <span class="txn-comment">${escHtml(t.comment)||'—'}</span>
           <button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button>
         </div>`).join('');
@@ -936,28 +876,23 @@ function renderP4() {
   const s    = calcSummary(txns);
 
   document.getElementById('p4stats').innerHTML = `
-    <div class="stat-card"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.income)}</div><div class="stat-card-sub">Наличный +${fmtAmt(s.cashIn)} / Безналичный +${fmtAmt(s.cardIn)}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.expense))}</div><div class="stat-card-sub">Наличный −${fmtAmt(Math.abs(s.cashEx))} / Безналичный −${fmtAmt(Math.abs(s.cardEx))}</div></div>
-    <div class="stat-card"><div class="stat-card-label">Безнал / Нал</div><div class="stat-card-value is-neu" style="font-size:13px">${fmtAmt(s.cardNet,true)}</div><div class="stat-card-sub">Нал: ${fmtAmt(s.cashNet,true)}</div></div>
+    <div class="stat-card"><div class="stat-card-label">Приход</div><div class="stat-card-value is-pos">+${fmtAmt(s.income)}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='income').length} операций</div></div>
+    <div class="stat-card"><div class="stat-card-label">Расход</div><div class="stat-card-value is-neg">−${fmtAmt(Math.abs(s.expense))}</div><div class="stat-card-sub">${txns.filter(t=>t.type==='expense').length} операций${s.fees ? ` · комиссии ${fmtAmt(s.fees)}` : ''}</div></div>
+    <div class="stat-card"><div class="stat-card-label">Переводы</div><div class="stat-card-value is-neu" style="font-size:13px">${s.transfers}</div><div class="stat-card-sub">${s.transfers ? 'между счетами, в итог не входят' : 'не было'}</div></div>
     <div class="stat-card"><div class="stat-card-label">Итог месяца</div><div class="stat-card-value ${s.net>=0?'is-pos':'is-neg'}">${fmtAmt(s.net,true)}</div><div class="stat-card-sub">${txns.length} операций</div></div>`;
 
   opsBudgetRenderP4(p4Month);
   document.getElementById('p4count').textContent = `${txns.length} операций за ${label}`;
 
   const sorted = [...txns].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
-  let cashRun=0, cardRun=0;
-  const withRun = sorted.map(t => {
-    if (t.way==='Наличный') cashRun+=t.amount; else cardRun+=t.amount;
-    return { ...t, cashRun, cardRun, totalRun: cashRun+cardRun };
-  });
+  let totalRun = 0;
+  const withRun = sorted.map(t => { totalRun += opsStatAmt(t); return { ...t, totalRun }; });
 
   document.getElementById('p4body').innerHTML = [...withRun].reverse().map(t => `<tr data-txnid="${t.id}">
     <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
-    <td><span class="tag ${t.type==='income'?'tag-income':'tag-expense'}">${t.type==='income'?'↑ Приход':'↓ Расход'}</span></td>
-    <td><span class="tag ${t.way==='Наличный'?'tag-cash':'tag-card'}">${t.way}</span></td>
-    <td class="${t.amount>=0?'amt-pos':'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount,true)}</td>
-    <td style="font-size:11px;color:var(--muted)">${fmtAmt(t.cashRun,true)}</td>
-    <td style="font-size:11px;color:var(--muted)">${fmtAmt(t.cardRun,true)}</td>
+    <td>${opsTxnTypeTag(t)}</td>
+    <td>${opsTxnAccTag(t)}</td>
+    <td style="font-weight:500;white-space:nowrap">${opsTxnAmountHTML(t)}</td>
     <td style="font-size:11px;font-weight:500;color:${t.totalRun>=0?'var(--green)':'var(--red)'}">${fmtAmt(t.totalRun,true)}</td>
     <td style="color:var(--muted)">${escHtml(t.comment)||'—'}</td>
     <td><button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')">✎</button></td>
@@ -976,12 +911,19 @@ function opsOpenAddModal() {
   document.getElementById('m-date').value    = (typeof opsLocalDate === 'function')
     ? opsLocalDate(0) : new Date().toISOString().slice(0,10);
   document.getElementById('m-type').value    = 'expense';
-  document.getElementById('m-way').value     = 'Безналичный';
+  // по умолчанию — безналичный счёт, как раньше был «Безналичный» способ
+  opsFillAccSel('m-acc', opsAccDefaultOfKind('card'));
+  opsFillAccSel('m-acc-to', opsAccDefaultOfKind('cash'));
+  document.getElementById('m-fee').value     = '';
   document.getElementById('m-amt').value     = '';
+  const amtTo = document.getElementById('m-amt-to'); if (amtTo) amtTo.value = '';
+  const rateEl = document.getElementById('m-rate'); if (rateEl) rateEl.value = '';
+  if (typeof opsRateReset === 'function') opsRateReset(false);
   document.getElementById('m-comment').value = '';
   opsFillCatSel('');
   opsAcReset(false);
   opsLoadItems([], 'none');
+  opsModalTypeChange();
   document.getElementById('m-del-btn').style.display = 'none';
   const moreBtn = document.getElementById('m-save-more-btn');
   if (moreBtn) moreBtn.style.display = '';
@@ -993,12 +935,30 @@ function opsOpenEditModal(id) {
   document.getElementById('ops-modal-title').textContent = 'Редактировать операцию';
   document.getElementById('m-date').value    = t.date;
   document.getElementById('m-type').value    = t.type;
-  document.getElementById('m-way').value     = t.way;
-  document.getElementById('m-amt').value     = Math.abs(t.amount);
+  if (opsIsTransfer(t)) {
+    opsFillAccSel('m-acc', t.from);
+    opsFillAccSel('m-acc-to', t.to);
+    document.getElementById('m-amt').value = +t.amountFrom || '';
+    document.getElementById('m-fee').value = +t.fee || '';
+    const amtTo = document.getElementById('m-amt-to'); if (amtTo) amtTo.value = +t.amountTo || '';
+    const rateEl = document.getElementById('m-rate'); if (rateEl) rateEl.value = '';
+    if (typeof opsRateReset === 'function') opsRateReset(false);
+  } else {
+    const accId = opsTxnAccount(t);
+    opsFillAccSel('m-acc', accId);
+    opsFillAccSel('m-acc-to', opsActiveAccounts().find(a => a.id !== accId)?.id || accId);
+    document.getElementById('m-amt').value = Math.abs(t.amount);
+    document.getElementById('m-fee').value = '';
+    const amtTo = document.getElementById('m-amt-to'); if (amtTo) amtTo.value = '';
+    // сохранённый курс операции не перетираем автоподстановкой
+    const rateEl = document.getElementById('m-rate'); if (rateEl) rateEl.value = +t.rate > 0 ? +t.rate : '';
+    if (typeof opsRateReset === 'function') opsRateReset(+t.rate > 0);
+  }
   document.getElementById('m-comment').value = t.comment || '';
   opsFillCatSel(t.cat || '');
   opsAcReset(!!t.cat);
   opsLoadItems(t.items || [], t.itemsMode || 'none');
+  opsModalTypeChange();
   document.getElementById('m-del-btn').style.display = 'block';
   const moreBtnE = document.getElementById('m-save-more-btn');
   if (moreBtnE) moreBtnE.style.display = 'none';   // при правке «и ещё» не нужно
@@ -1007,12 +967,74 @@ function opsOpenEditModal(id) {
 function opsCloseModal() {
   document.getElementById('ops-modal').classList.remove('is-open');
 }
+function opsStripTransferFields(t) {
+  delete t.from; delete t.to; delete t.amountFrom; delete t.amountTo; delete t.fee;
+}
+
+// Перевод между счетами: одна запись с двумя сторонами. amount = −комиссия —
+// так весь код, суммирующий amount, видит только реальную потерю денег.
+function opsSaveTransfer(keepOpen, date) {
+  const from    = document.getElementById('m-acc').value;
+  const to      = document.getElementById('m-acc-to').value;
+  const sum     = Math.abs(parseFloat(document.getElementById('m-amt').value) || 0);
+  const feeRaw  = parseFloat(document.getElementById('m-fee').value);
+  const fee     = (!feeRaw || feeRaw < 0) ? 0 : +feeRaw.toFixed(2);
+  const comment = document.getElementById('m-comment').value.trim();
+
+  if (!from || !to)  { showErr('Выберите оба счёта'); return; }
+  if (from === to)   { showErr('Счета перевода должны различаться'); return; }
+  if (!sum)          { showErr('Укажите сумму перевода'); return; }
+
+  // Одна валюта — пришло ровно столько, сколько ушло. Разные валюты (обмен) —
+  // полученная сумма вводится отдельно, и курс навсегда зафиксирован этими
+  // двумя суммами.
+  const fromCur = (typeof opsAccCurrency === 'function') ? opsAccCurrency(from) : 'RUP';
+  const toCur   = (typeof opsAccCurrency === 'function') ? opsAccCurrency(to)   : 'RUP';
+  let received = sum;
+  if (fromCur !== toCur) {
+    received = Math.abs(parseFloat(String(document.getElementById('m-amt-to')?.value || '').replace(',', '.')) || 0);
+    if (!received) { showErr(`Укажите, сколько получено в ${toCur}`); return; }
+  }
+  const fields = {
+    date, type: 'transfer', from, to,
+    amountFrom: +sum.toFixed(2), amountTo: +received.toFixed(2), fee,
+    rate: undefined, rateTo: undefined,   // курс перевода — в самих суммах
+    amount: -fee,                 // влияние на общий итог — только комиссия
+    account: from, way: opsAccWay(from),   // совместимость со старыми версиями
+    comment, cat: '', items: [], itemsMode: undefined,
+    _editedAt: new Date().toISOString()
+  };
+
+  if (opsEditId) {
+    const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
+    if (t) Object.assign(t, fields);
+  } else {
+    opsState.txns.push({ id: opsGenId(), ...fields });
+  }
+  opsSave();
+  if (keepOpen) opsPrepareNextOp(); else opsCloseModal();
+  opsReRenderCurrent();
+  if (typeof driveToken !== 'undefined' && driveToken) driveDebouncedPush('ops');
+  if (fee) opsBudgetWarnAfterSave(date, 'expense');   // комиссия — это расход
+}
+
 // keepOpen=true — «Сохранить и ещё»: форма остаётся открытой для следующей операции
 function opsSaveOp(keepOpen) {
   const date    = document.getElementById('m-date').value;   if (!date) return;
   const type    = document.getElementById('m-type').value;
-  const way     = document.getElementById('m-way').value;
+  if (type === 'transfer') return opsSaveTransfer(keepOpen, date);
+  const account = document.getElementById('m-acc').value;
+  const way     = opsAccWay(account);
   const rawAmt  = parseFloat(document.getElementById('m-amt').value) || 0;
+
+  // Валютный счёт: курс к базовой фиксируется в самой операции (вариант А)
+  let rate, rateTo;
+  if (typeof opsAccCurrency === 'function' && opsAccCurrency(account) !== opsBaseCurrency()) {
+    const r = parseFloat(String(document.getElementById('m-rate')?.value || '').replace(',', '.'));
+    if (!(r > 0)) { showErr(`Укажите курс: 1 ${opsAccCurrency(account)} = ? ${opsBaseCurrency()}`); return; }
+    rate = +r.toFixed(6);
+    rateTo = opsBaseCurrency();
+  }
   const comment = document.getElementById('m-comment').value.trim();
   const cat     = document.getElementById('m-cat').value;
   const amount  = type === 'expense' ? -Math.abs(rawAmt) : Math.abs(rawAmt);
@@ -1025,9 +1047,12 @@ function opsSaveOp(keepOpen) {
   const now = new Date().toISOString();
   if (opsEditId) {
     const t = opsState.txns.find(t => String(t.id) === String(opsEditId));
-    if (t) Object.assign(t, { date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
+    if (t) {
+      opsStripTransferFields(t);   // операцию могли превратить из перевода в обычную
+      Object.assign(t, { date, type, way, account, amount, rate, rateTo, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
+    }
   } else {
-    opsState.txns.push({ id: opsGenId(), date, type, way, amount, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
+    opsState.txns.push({ id: opsGenId(), date, type, way, account, amount, rate, rateTo, comment, cat, items, itemsMode: items.length ? itemsMode : undefined, _editedAt: now });
   }
   opsSave();
   if (keepOpen) opsPrepareNextOp(); else opsCloseModal();
@@ -1043,7 +1068,7 @@ function opsSaveOp(keepOpen) {
       const monthKey   = date.slice(0, 7);
       const monthSpent = opsState.txns
         .filter(t => !t._deleted && t.type === 'expense' && t.cat === cat && t.date.startsWith(monthKey))
-        .reduce((s, t) => s + Math.abs(t.amount), 0);
+        .reduce((s, t) => s + Math.abs(opsStatAmt(t)), 0);
       const pctOfLimit = monthSpent / catObj.limit * 100;
       if (monthSpent > catObj.limit) {
         showWarn(`✕ Лимит «${catObj.name}» превышен: ${fmtAmt(monthSpent)} / ${fmtAmt(catObj.limit)} руб`);
@@ -1063,6 +1088,9 @@ function opsPrepareNextOp() {
   if (more) more.style.display = '';
   document.getElementById('m-amt').value = '';
   document.getElementById('m-comment').value = '';
+  const feeEl = document.getElementById('m-fee'); if (feeEl) feeEl.value = '';
+  const amtToEl = document.getElementById('m-amt-to'); if (amtToEl) amtToEl.value = '';
+  if (typeof opsFxPreview === 'function') opsFxPreview();
   opsLoadItems([], 'none');
   if (typeof opsAcReset === 'function') opsAcReset(!!document.getElementById('m-cat').value);
   document.getElementById('m-amt').focus();
@@ -1276,9 +1304,15 @@ function opsExportJSON() {
 function opsExportXLSX() {
   if (typeof XLSX === 'undefined') { showErr('Библиотека таблиц не загрузилась — экспорт в Excel недоступен'); return; }
   const sorted = [...opsState.txns.filter(t => !t._deleted)].sort((a,b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
-  const rows   = sorted.map(t => [fmtDateFull(t.date), t.type==='income'?'Приход':'Расход', t.way, t.amount, t.comment||'']);
+  const rows   = sorted.map(t => opsIsTransfer(t)
+    ? [fmtDateFull(t.date), 'Перевод', `${opsAccName(t.from)} → ${opsAccName(t.to)}`, +t.amountFrom || 0,
+       (t.comment||'') + (+t.fee ? ` [комиссия ${t.fee}]` : '') +
+       (opsAccCurrency(t.from) !== opsAccCurrency(t.to) ? ` [получено ${t.amountTo} ${opsAccCurrency(t.to)}]` : ''),
+       opsAccCurrency(t.from)]
+    : [fmtDateFull(t.date), t.type==='income'?'Приход':'Расход', opsAccName(opsTxnAccount(t)), t.amount, t.comment||'',
+       opsTxnCurrency(t)]);
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:28},{wch:10},{wch:14},{wch:12},{wch:60}];
+  ws['!cols'] = [{wch:28},{wch:10},{wch:14},{wch:12},{wch:60},{wch:8}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Операции');
   XLSX.writeFile(wb, `finops_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -1319,6 +1353,7 @@ function opsImportFile(input) {
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1 });
         const ruM  = {'января':'01','февраля':'02','марта':'03','апреля':'04','мая':'05','июня':'06','июля':'07','августа':'08','сентября':'09','октября':'10','ноября':'11','декабря':'12'};
         const imported = [];
+        let skippedTransfers = 0;
         for (const row of rows) {
           if (!row || row.length < 4) continue;
           const [dateRaw, typeRaw, wayRaw, amtRaw, commentRaw] = row;
@@ -1333,17 +1368,25 @@ function opsImportFile(input) {
             if (d) date = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
           }
           if (!date) continue;
-          const type    = String(typeRaw||'').toLowerCase().includes('приход') ? 'income' : 'expense';
-          const wayStr  = String(wayRaw||'');
-          const way     = wayStr.toLowerCase().includes('нал') ? 'Наличный' : 'Безналичный';
+          const typeStr = String(typeRaw||'').toLowerCase();
+          if (typeStr.includes('перевод')) { skippedTransfers++; continue; }
+          const type    = typeStr.includes('приход') ? 'income' : 'expense';
+          const wayStr  = String(wayRaw||'').toLowerCase();
+          // «безналичный» тоже содержит «нал» — проверяем его первым
+          const byName  = opsAccounts().find(a => a.name.toLowerCase() === wayStr.trim());
+          const account = byName ? byName.id
+                        : (wayStr.includes('безнал') || !wayStr.includes('нал')) ? opsAccDefaultOfKind('card') : opsAccDefaultOfKind('cash');
+          const way     = opsAccWay(account);
           const amount  = parseFloat(String(amtRaw).replace(',','.')) || 0;
           const comment = String(commentRaw||'').trim();
-          imported.push({ id: opsGenId(), date, type, way, amount, comment });
+          imported.push({ id: opsGenId(), date, type, way, account, amount, comment });
         }
         if (!imported.length) { showErr('Не удалось распознать данные.'); return; }
         // confirm removed - sandbox incompatible
         opsState.txns.push(...imported);
         opsSave(); opsReRenderCurrent();
+        showOk(`Импортировано операций: ${imported.length}`);
+        if (skippedTransfers) showWarn(`Переводов пропущено: ${skippedTransfers} — Excel их не переносит, используйте JSON`);
       } catch(err) { showErr('Ошибка: ' + err.message); }
     };
     r.readAsBinaryString(file);
@@ -2558,7 +2601,9 @@ function renderP6() {
   let txns = opsState.txns.filter(t => !t._deleted);
   if (month)      txns = txns.filter(t => t.date.startsWith(month));
   else if (year)  txns = txns.filter(t => t.date.startsWith(year));
-  if (type)       txns = txns.filter(t => t.type === type);
+  // перевод без комиссии в распределение не идёт, с комиссией — как расход
+  txns = txns.filter(t => opsStatType(t));
+  if (type)       txns = txns.filter(t => opsStatType(t) === type);
 
   // Keep f1cat in sync
   const f1cat = document.getElementById('f1cat');
@@ -2575,7 +2620,7 @@ function renderP6() {
     const cid = t.cat || '__none__';
     if (!groups[cid]) groups[cid] = { count: 0, sum: 0 };
     groups[cid].count++;
-    groups[cid].sum += Math.abs(t.amount);
+    groups[cid].sum += Math.abs(opsStatAmt(t));
   }
   const total  = Object.values(groups).reduce((s, g) => s + g.sum, 0);
   const sorted = Object.entries(groups).sort((a, b) => b[1].sum - a[1].sum);
@@ -2593,7 +2638,7 @@ function renderP6() {
     prevGroups = {};
     for (const t of prevTxns) {
       const cid = t.cat || '__none__';
-      prevGroups[cid] = (prevGroups[cid] || 0) + Math.abs(t.amount);
+      prevGroups[cid] = (prevGroups[cid] || 0) + Math.abs(opsStatAmt(t));
     }
   }
   const hasTrend = prevGroups !== null;
@@ -2603,7 +2648,7 @@ function renderP6() {
   const limitExpenses = {};
   for (const t of opsState.txns.filter(t => !t._deleted && t.type === 'expense' && t.date.startsWith(limitMonthKey))) {
     const cid = t.cat || '__none__';
-    limitExpenses[cid] = (limitExpenses[cid] || 0) + Math.abs(t.amount);
+    limitExpenses[cid] = (limitExpenses[cid] || 0) + Math.abs(opsStatAmt(t));
   }
 
   // Chart
@@ -2765,9 +2810,9 @@ function p6ToggleTxns(catId, event) {
   const rows = recent.map(t => `
     <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);">
       <span style="color:var(--muted);font-size:10px;white-space:nowrap;min-width:58px;">${fmtDate(t.date)}</span>
-      <span class="tag ${t.type === 'income' ? 'tag-income' : 'tag-expense'}" style="font-size:9px;">${t.type === 'income' ? '↑' : '↓'}</span>
-      <span class="tag ${t.way === 'Наличный' ? 'tag-cash' : 'tag-card'}" style="font-size:9px;">${t.way === 'Наличный' ? 'нал' : 'безнал'}</span>
-      <span class="${t.amount >= 0 ? 'amt-pos' : 'amt-neg'}" style="font-size:11px;font-weight:500;min-width:72px;flex-shrink:0;">${fmtAmt(t.amount, true)}</span>
+      ${opsTxnTypeTag(t, true)}
+      ${opsTxnAccTag(t, true)}
+      <span style="font-size:11px;font-weight:500;min-width:72px;flex-shrink:0;">${opsTxnAmountHTML(t)}</span>
       <span style="font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(t.comment) || '—'}</span>
       <button class="row-edit-btn" onclick="opsOpenEditModal('${t.id}')" style="flex-shrink:0;">✎</button>
     </div>`).join('');
@@ -2999,9 +3044,7 @@ function opsTplRowHTML(t) {
   const typeTag = t.type === 'income'
     ? '<span class="tag tag-income" style="font-size:9px;">↑ Приход</span>'
     : '<span class="tag tag-expense" style="font-size:9px;">↓ Расход</span>';
-  const wayTag = t.way === 'Наличный'
-    ? '<span class="tag tag-cash" style="font-size:9px;">нал</span>'
-    : '<span class="tag tag-card" style="font-size:9px;">безнал</span>';
+  const wayTag = opsTxnAccTag(t, true);
   const amtPart = t.amount ? `<span style="font-size:10px;color:var(--text);font-weight:500;">${fmtAmt(Math.abs(t.amount))} руб</span>` : '';
   const catPart = cat ? `<span style="font-size:10px;color:var(--muted);">${escHtml(opsCatDisplay(cat))}</span>` : '';
   const itemsPart = (t.items && t.items.length)
@@ -3042,11 +3085,13 @@ function opsTplEditFormHTML(t) {
         </select>
       </div>
       <div class="form-field">
-        <label>Способ</label>
-        <select id="tpl-e-way">
-          <option value="Безналичный" ${t.way === 'Безналичный' ? 'selected' : ''}>Безналичный</option>
-          <option value="Наличный"    ${t.way === 'Наличный'    ? 'selected' : ''}>Наличный</option>
-        </select>
+        <label>Счёт</label>
+        <select id="tpl-e-acc">${(() => {
+          const cur = opsTxnAccount(t);
+          const list = opsActiveAccounts();
+          if (!list.some(a => a.id === cur) && opsAcc(cur)) list.push(opsAcc(cur));
+          return list.map(a => `<option value="${escHtml(a.id)}" ${a.id === cur ? 'selected' : ''}>${escHtml(a.name)}</option>`).join('');
+        })()}</select>
       </div>
       <div class="form-field">
         <label>Сумма, руб</label>
@@ -3111,7 +3156,8 @@ function opsTplSaveEdit(id) {
 
   t.name      = name;
   t.type      = document.getElementById('tpl-e-type').value;
-  t.way       = document.getElementById('tpl-e-way').value;
+  t.account   = document.getElementById('tpl-e-acc').value;
+  t.way       = opsAccWay(t.account);
   t.amount    = (!rawAmt || isNaN(amt) || amt < 0) ? 0 : +amt.toFixed(2);
   t.cat       = document.getElementById('tpl-e-cat').value;
   t.comment   = (document.getElementById('tpl-e-comment')?.value || '').trim();
@@ -3159,13 +3205,15 @@ function opsTplApply(id) {
     document.getElementById('m-del-btn').style.display = 'none';
   }
   document.getElementById('m-type').value    = t.type;
-  document.getElementById('m-way').value     = t.way;
+  opsFillAccSel('m-acc', opsTxnAccount(t));
+  if (typeof opsRateReset === 'function') opsRateReset(false);
   document.getElementById('m-amt').value     = t.amount ? Math.abs(t.amount) : '';
   document.getElementById('m-comment').value = t.comment || '';
   opsFillCatSel(t.cat || '');
   // категория из шаблона — осознанный выбор, автокатегоризация её не перетирает
   if (typeof opsAcReset === 'function') opsAcReset(!!t.cat);
   opsLoadItems(t.items || [], t.itemsMode || 'none');
+  opsModalTypeChange();
   if (!opsModalOpen) document.getElementById('ops-modal').classList.add('is-open');
 }
 
@@ -3183,7 +3231,9 @@ function opsTplDelete(id) {
 
 function opsTplSaveFromModal() {
   const type      = document.getElementById('m-type').value;
-  const way       = document.getElementById('m-way').value;
+  if (type === 'transfer') { showWarn('Шаблоны пока поддерживают только приход и расход'); return; }
+  const account   = document.getElementById('m-acc').value;
+  const way       = opsAccWay(account);
   const amount    = parseFloat(document.getElementById('m-amt').value) || 0;
   const comment   = document.getElementById('m-comment').value.trim();
   const cat       = document.getElementById('m-cat').value;
@@ -3194,7 +3244,7 @@ function opsTplSaveFromModal() {
   appPrompt('Название шаблона:', defName).then(name => {
     const nm = (name || '').trim();
     if (!nm) return;
-    const fields = { name: nm, type, way, amount, cat, comment, items, itemsMode,
+    const fields = { name: nm, type, way, account, amount, cat, comment, items, itemsMode,
                      _editedAt: new Date().toISOString() };
 
     // Имя уже занято — предлагаем заменить, а не плодить второй такой же шаблон
@@ -4323,12 +4373,21 @@ quickInputSubmit = function() {
   // Знак и сумма: без знака или + → приход, - → расход
   const amtMatch = str.match(/^([+\-]?)(\d+(?:[.,]\d+)?)/);
   if (!amtMatch) {
-    showHint('⚠ Не найдена сумма. Формат: [+/-][сумма] [нал|безнал] [коммент]', 'var(--red)');
+    showHint('⚠ Не найдена сумма. Формат: [+/-][сумма] [валюта] [нал|безнал] [коммент]', 'var(--red)');
     return;
   }
   type = amtMatch[1] === '-' ? 'expense' : 'income';
   amount = parseFloat(amtMatch[2].replace(',','.'));
   str = str.slice(amtMatch[0].length).trim();
+
+  // Валюта сразу после суммы: «-10 usd кофе». Принимаем только коды из
+  // справочника валют, чтобы обычное слово в комментарии не приняли за валюту.
+  let curCode = null;
+  const curM = str.match(/^([a-zA-Z]{2,5})(?=\s|$)\s*/);
+  if (curM && typeof opsCur === 'function' && opsCur(curM[1].toUpperCase())) {
+    curCode = curM[1].toUpperCase();
+    str = str.slice(curM[0].length).trim();
+  }
 
   // Способ
   const wayM = str.match(/^(нал(?:\.|ичн\w*)?|безнал(?:\.|ичн\w*)?)\s*/i);
@@ -4336,6 +4395,19 @@ quickInputSubmit = function() {
     way = wayM[1].toLowerCase().startsWith('нал') ? 'Наличный' : 'Безналичный';
     str = str.slice(wayM[0].length).trim();
   }
+  let account = opsAccDefaultOfKind(way === 'Наличный' ? 'cash' : 'card');
+  let rate, rateTo;
+  if (curCode && typeof opsBaseCurrency === 'function' && curCode !== opsBaseCurrency()) {
+    const kind = wayM ? (way === 'Наличный' ? 'cash' : 'card') : null;
+    const inCur = opsActiveAccounts().filter(a => (a.currency || 'RUP') === curCode);
+    const hit = (kind && inCur.find(a => a.kind === kind)) || inCur[0];
+    if (!hit) { showHint(`⚠ Нет счёта в ${curCode} — создайте его в «⚙ Счета»`, 'var(--red)'); return; }
+    account = hit.id;
+    const r = opsFxRate(curCode, opsBaseCurrency(), (typeof opsLocalDate === 'function') ? opsLocalDate(0) : undefined);
+    if (!r) { showHint(`⚠ Нет курса ${curCode} — первую такую операцию введите через форму`, 'var(--red)'); return; }
+    rate = +r.toFixed(6); rateTo = opsBaseCurrency();
+  }
+  way = opsAccWay(account);
 
   // Явное указание категории первым словом — приоритетнее автомата
   const words = str.split(/\s+/);
@@ -4355,15 +4427,17 @@ quickInputSubmit = function() {
     if (guess) { cat = guess; catAuto = true; }
   }
 
-  const date = new Date().toISOString().slice(0,10);
+  // дата по местному календарю — после полуночи UTC отдавал вчерашнее число
+  const date = (typeof opsLocalDate === 'function') ? opsLocalDate(0) : new Date().toISOString().slice(0,10);
   const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
-  opsState.txns.push({ id: opsGenId(), date, type, way, amount: finalAmount, comment, cat, _editedAt: new Date().toISOString() });
+  opsState.txns.push({ id: opsGenId(), date, type, way, account, amount: finalAmount, rate, rateTo, comment, cat, _editedAt: new Date().toISOString() });
   opsSave(); opsReRenderCurrent();
   if (driveToken) driveDebouncedPush('ops');
 
   const catName = cat ? opsCats().find(c=>c.id===cat)?.name : '';
   const catPart = catName ? ' · ' + catName + (catAuto ? ' (авто)' : '') : '';
-  showHint(`✓ ${type==='income'?'+':'−'}${amount} · ${way==='Наличный'?'нал':'безнал'}${catPart}${comment?' · '+comment:''}`, 'var(--green)');
+  const curPart = (curCode && rate) ? ` ${curCode} (курс ${opsFmtRate(rate)})` : '';
+  showHint(`✓ ${type==='income'?'+':'−'}${amount}${curPart} · ${opsAccName(account)}${catPart}${comment?' · '+comment:''}`, 'var(--green)');
   inp.value = '';
 };
 
@@ -4442,7 +4516,11 @@ function opsTxnById(id) {
 function opsTxnLabel(t) {
   const c = (t.comment || '').trim();
   const short = c.length > 28 ? c.slice(0, 27) + '…' : c;
-  return fmtAmt(t.amount, true) + (short ? ' · ' + short : '');
+  const fx = typeof opsFmtMoney === 'function';
+  const head = opsIsTransfer(t)
+    ? `⇄ ${fx ? opsFmtMoney(+t.amountFrom || 0, opsAccCurrency(t.from)) : fmtAmt(+t.amountFrom || 0)} ${opsAccName(t.from)} → ${opsAccName(t.to)}`
+    : (fx ? opsFmtMoney(t.amount, opsTxnCurrency(t), true) : fmtAmt(t.amount, true));
+  return head + (short ? ' · ' + short : '');
 }
 
 function opsDeletedTxns() {
@@ -4596,11 +4674,11 @@ function renderP7() {
     return `<tr>
       <td style="white-space:nowrap;color:var(--muted)">${fmtDate(t.date)}</td>
       <td><div class="txn-tags">
-        <span class="tag ${t.type === 'income' ? 'tag-income' : 'tag-expense'}">${t.type === 'income' ? '↑ Приход' : '↓ Расход'}</span>
-        <span class="tag ${t.way === 'Наличный' ? 'tag-cash' : 'tag-card'}">${t.way}</span>
+        ${opsTxnTypeTag(t)}
+        ${opsTxnAccTag(t)}
         ${cat ? `<span class="tag" style="border-color:${cat.color};color:${cat.color}">${escHtml(opsCatDisplay(cat))}</span>` : ''}
       </div></td>
-      <td class="${t.amount >= 0 ? 'amt-pos' : 'amt-neg'}" style="font-weight:500;white-space:nowrap">${fmtAmt(t.amount, true)}</td>
+      <td style="font-weight:500;white-space:nowrap">${opsTxnAmountHTML(t)}</td>
       <td style="color:var(--muted)">${escHtml(t.comment) || '—'}</td>
       <td style="color:var(--muted2);white-space:nowrap;font-size:10px">${opsFmtDeletedAt(t._deletedAt)}</td>
       <td style="white-space:nowrap">

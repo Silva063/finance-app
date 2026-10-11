@@ -4,6 +4,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..') + path.sep;
 const app   = fs.readFileSync(ROOT + 'js/app.js', 'utf8');
 const drive = fs.readFileSync(ROOT + 'js/drive.js', 'utf8');
+const accSrc = fs.readFileSync(ROOT + 'js/accounts.js', 'utf8');   // счета и переводы
 
 // вырезаем только блок корзины и только _mergeOps — без DOM-обвязки приложения
 const trash = app.slice(app.indexOf('function opsTxnById'));
@@ -33,7 +34,7 @@ const ctx = vm.createContext({
   document: { getElementById: id => nodes[id] || null },
   console, Map, Set, Math, String, Number, JSON, Date, Array, Object, isNaN
 });
-vm.runInContext(mergeSrc + '\n' + trash + `
+vm.runInContext(accSrc + '\n' + mergeSrc + '\n' + trash + `
 ;globalThis.__api = {
   get state(){ return opsState; }, set state(v){ opsState = v; },
   del: opsSoftDelete, restore: opsRestoreTxn, purgeAll: opsPurgeAll, restoreAll: opsRestoreAll,

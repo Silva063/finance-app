@@ -112,13 +112,9 @@
       <div class="sidebar-nav-dot"></div>
       <div><div>Все операции</div></div>
     </div>
-    <div class="sidebar-nav-item" onclick="opsNav('op-p2');closeSidebar()">
+    <div class="sidebar-nav-item" onclick="opsNav('op-acc');closeSidebar()">
       <div class="sidebar-nav-dot"></div>
-      <div>Безналичные</div>
-    </div>
-    <div class="sidebar-nav-item" onclick="opsNav('op-p5');closeSidebar()">
-      <div class="sidebar-nav-dot"></div>
-      <div>Наличные</div>
+      <div>Счета</div>
     </div>
     <div class="sidebar-nav-item" onclick="opsNav('op-p3');closeSidebar()">
       <div class="sidebar-nav-dot"></div>
@@ -144,7 +140,7 @@
       <div style="font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:5px;">Быстрый ввод</div>
       <div style="display:flex;gap:5px;align-items:center;">
         <input id="quick-input" class="filter-input" style="flex:1;min-width:0;font-size:11px;"
-               placeholder="[+/-][сумма] [нал|безнал] [коммент]"
+               placeholder="[+/-][сумма] [валюта] [нал|безнал] [коммент]"
                onkeydown="if(event.key==='Enter')quickInputSubmit()">
         <button class="btn btn-sm btn-primary" onclick="quickInputSubmit()" style="flex-shrink:0;white-space:nowrap;">↵</button>
       </div>
@@ -257,11 +253,10 @@
           <option value="">Все типы</option>
           <option value="income">Приход</option>
           <option value="expense">Расход</option>
+          <option value="transfer">Перевод</option>
         </select>
         <select class="filter-input" id="f1way" onchange="renderP1()">
-          <option value="">Все способы</option>
-          <option value="Наличный">Наличный</option>
-          <option value="Безналичный">Безналичный</option>
+          <option value="">Все счета</option>
         </select>
         <select class="filter-input" id="f1cat" onchange="renderP1()"><option value="">Все категории</option><option value="__none__">— без категории</option></select>
         <select class="filter-input" id="f1year" onchange="renderP1()"><option value="">Все годы</option></select>
@@ -336,47 +331,26 @@
       </div>
     </div>
 
-    <!-- PAGE: Безналичные -->
-    <div class="page" id="op-p2">
-      <div class="page-title">Безналичные</div>
-      <div class="page-sub">Для сверки с балансом е-кошелька</div>
-      <div class="stat-grid stat-grid-4" id="p2stats"></div>
+    <!-- PAGE: Счета -->
+    <div class="page" id="op-acc">
+      <div class="page-title">Счета</div>
+      <div class="page-sub">Остатки и движение по каждому счёту — для сверки с кошельком и картой</div>
+      <div class="stat-grid stat-grid-4" id="acc-cards"></div>
       <div class="filters">
-        <input class="filter-input" type="text" id="f2search" placeholder="Поиск..." oninput="renderP2()">
-        <select class="filter-input" id="f2year" onchange="renderP2()"><option value="">Все годы</option></select>
-        <select class="filter-input" id="f2month" onchange="renderP2()"><option value="">Все месяцы</option></select>
-        <button class="filter-reset" onclick="opsResetP2()">↺ Сброс</button>
+        <select class="filter-input" id="facc-acc" onchange="renderAccounts()"></select>
+        <input class="filter-input" type="text" id="facc-search" placeholder="Поиск..." oninput="renderAccounts()">
+        <select class="filter-input" id="facc-year" onchange="renderAccounts()"><option value="">Все годы</option></select>
+        <select class="filter-input" id="facc-month" onchange="renderAccounts()"><option value="">Все месяцы</option></select>
+        <button class="filter-reset" onclick="opsResetAcc()">↺ Сброс</button>
+        <button class="btn btn-sm" style="margin-left:auto" onclick="opsAccOpenModal()">⚙ Счета</button>
       </div>
       <div class="tbl-wrap">
         <div class="tbl-header">
-          <div class="tbl-caption" id="p2count">—</div>
-          <div id="p2diff" class="diff-badge"></div>
+          <div class="tbl-caption" id="acc-count">—</div>
         </div>
         <table>
-          <thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Нарастающий итог</th><th>Комментарий</th><th></th></tr></thead>
-          <tbody id="p2body"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- PAGE: Наличные -->
-    <div class="page" id="op-p5">
-      <div class="page-title">Наличные</div>
-      <div class="page-sub">Для сверки с фактической наличностью</div>
-      <div class="stat-grid stat-grid-4" id="p5stats"></div>
-      <div class="filters">
-        <input class="filter-input" type="text" id="f5search" placeholder="Поиск..." oninput="renderP5()">
-        <select class="filter-input" id="f5year" onchange="renderP5()"><option value="">Все годы</option></select>
-        <select class="filter-input" id="f5month" onchange="renderP5()"><option value="">Все месяцы</option></select>
-        <button class="filter-reset" onclick="opsResetP5()">↺ Сброс</button>
-      </div>
-      <div class="tbl-wrap">
-        <div class="tbl-header">
-          <div class="tbl-caption" id="p5count">—</div>
-        </div>
-        <table>
-          <thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Нарастающий итог</th><th>Комментарий</th><th></th></tr></thead>
-          <tbody id="p5body"></tbody>
+          <thead><tr><th>Дата</th><th>Операция</th><th>Сумма</th><th>Остаток</th><th>Комментарий</th><th></th></tr></thead>
+          <tbody id="acc-body"></tbody>
         </table>
       </div>
     </div>
@@ -407,7 +381,7 @@
       <div class="tbl-wrap">
         <div class="tbl-header"><div class="tbl-caption" id="p4count">—</div></div>
         <table>
-          <thead><tr><th>Дата</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Нал. итог</th><th>Безнал. итог</th><th>Общий итог</th><th>Комментарий</th><th></th></tr></thead>
+          <thead><tr><th>Дата</th><th>Тип</th><th>Счёт</th><th>Сумма</th><th>Итог месяца</th><th>Комментарий</th><th></th></tr></thead>
           <tbody id="p4body"></tbody>
         </table>
       </div>
@@ -489,30 +463,51 @@
     <div class="form-row">
       <div class="form-field">
         <label>Дата</label>
-        <input type="date" id="m-date">
+        <input type="date" id="m-date" onchange="opsFxFormSync()">
       </div>
       <div class="form-field">
         <label>Тип</label>
-        <select id="m-type">
+        <select id="m-type" onchange="opsModalTypeChange()">
           <option value="income">Приход</option>
           <option value="expense">Расход</option>
+          <option value="transfer">Перевод</option>
         </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-field">
-        <label>Способ</label>
-        <select id="m-way">
-          <option value="Безналичный">Безналичный</option>
-          <option value="Наличный">Наличный</option>
-        </select>
+        <label id="m-acc-label">Счёт</label>
+        <select id="m-acc" onchange="opsFxFormSync()"></select>
       </div>
       <div class="form-field">
-        <label>Сумма (руб)</label>
-        <input type="number" step="0.01" id="m-amt" placeholder="0.00">
+        <label id="m-amt-label">Сумма</label>
+        <input type="number" step="0.01" id="m-amt" placeholder="0.00" oninput="opsFxPreview()">
       </div>
     </div>
-    <div class="form-field">
+    <div id="m-transfer-row" hidden>
+      <div class="form-row">
+        <div class="form-field">
+          <label>На счёт</label>
+          <select id="m-acc-to" onchange="opsFxFormSync()"></select>
+        </div>
+        <div class="form-field" id="m-amt-to-field" hidden>
+          <label id="m-amt-to-label">Получено</label>
+          <input type="number" step="0.01" id="m-amt-to" placeholder="0.00" oninput="opsFxPreview()">
+        </div>
+      </div>
+      <div class="form-field">
+        <label id="m-fee-label">Комиссия</label>
+        <input type="number" step="0.01" id="m-fee" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="form-field" id="m-rate-row" hidden>
+      <label id="m-rate-label">Курс</label>
+      <input type="text" inputmode="decimal" id="m-rate" placeholder="0.00" oninput="opsRateTouch()">
+      <div class="budget-hint" id="m-rate-src"></div>
+    </div>
+    <div class="fx-preview" id="m-fx-preview" hidden></div>
+    <div class="form-field" id="m-cat-field">
       <label>Категория <span class="cat-auto-badge" id="m-cat-auto" hidden>авто</span></label>
       <select id="m-cat" onchange="opsAcTouch()"></select>
       <button type="button" class="cat-suggest" id="m-cat-suggest" hidden onclick="opsAcApply()"></button>
@@ -1000,6 +995,41 @@
 <!-- ══════════════════════════════════════════════
      MODAL: ШАБЛОНЫ ОПЕРАЦИЙ
 ══════════════════════════════════════════════ -->
+<div class="overlay" id="acc-modal">
+  <div class="modal" style="width:520px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
+    <div class="modal-title">⚙ Счета</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+      Счёт с операциями можно только архивировать: он пропадёт из выбора, история и остаток сохранятся.
+      «Нал / безнал» определяет, какой счёт подставляется в быстром вводе по словам «нал» и «безнал».
+    </div>
+    <div id="acc-list" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="modal-actions" style="margin-top:14px;flex-shrink:0;">
+      <button class="btn modal-actions-left" onclick="opsAccAdd()">+ Новый счёт</button>
+      <button class="btn" onclick="opsCurOpenModal()">Валюты</button>
+      <button class="btn" onclick="opsAccCloseModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="cur-modal">
+  <div class="modal" style="width:480px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
+    <div class="modal-title">Валюты</div>
+    <div class="form-field">
+      <label>Базовая валюта — в ней считается вся статистика</label>
+      <select id="cur-base" onchange="opsSetBaseCurrency(this.value)"></select>
+    </div>
+    <div id="cur-list" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="cur-add">
+      <input type="text" class="filter-input" id="cur-new-code" placeholder="Код, напр. GBP" maxlength="5">
+      <input type="text" class="filter-input" id="cur-new-name" placeholder="Название">
+      <button type="button" class="btn btn-sm" onclick="opsCurAdd()">+ Добавить</button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px;flex-shrink:0;">
+      <button class="btn" onclick="opsCurCloseModal()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="rec-modal">
   <div class="modal" style="width:480px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;">
     <div class="modal-title">↻ Ожидаются повторяющиеся операции</div>
@@ -1052,6 +1082,8 @@
 ══════════════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
 <script src="js/app.js"></script>
+<script src="js/currency.js"></script>
+<script src="js/accounts.js"></script>
 <script src="js/autocat.js"></script>
 <script src="js/swipe.js"></script>
 <script src="js/budget.js"></script>

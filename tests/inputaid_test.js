@@ -124,7 +124,8 @@ t('сброс забывает сохранённое', !('finOpsFilters' in sto
 
 console.log('\n— набор полей по страницам —');
 t('описаны все страницы с фильтрами',
-  Object.keys(I.fields).sort().join(',') === 'op-p1,op-p2,op-p3,op-p5,op-p6',
+  // вкладки «Наличные» и «Безналичные» заменены одной «Счета»
+  Object.keys(I.fields).sort().join(',') === 'op-acc,op-p1,op-p3,op-p6',
   Object.keys(I.fields).sort().join(','));
 t('год идёт раньше месяца (месяц от него зависит)',
   I.fields['op-p1'].indexOf('f1year') < I.fields['op-p1'].indexOf('f1month'), 'порядок неверный');
@@ -149,7 +150,8 @@ const css = fs.readFileSync(ROOT + 'css/main.css', 'utf8');
 
 // От кнопок «сегодня/вчера» отказались — следов быть не должно
 t('кнопок даты в разметке нет', !html.includes('m-date-today') && !html.includes('date-chip'), 'остались следы');
-t('поле даты без лишних обработчиков', html.includes('<input type="date" id="m-date">'), 'на поле что-то навешано');
+// на поле даты теперь висит пересчёт курса (валюты), но не следы чипов «сегодня/вчера»
+t('на поле даты нет обработчика чипов', !html.includes('opsDateChipsSync'), 'остался обработчик чипов');
 t('стилей чипов не осталось', !css.includes('.date-chip'), 'стили остались');
 
 // Подвал: три кнопки в заданном порядке
@@ -215,8 +217,9 @@ t('при keepOpen форма не закрывается',
 t('есть подготовка к следующей операции', app.includes('function opsPrepareNextOp()'), 'нет функции');
 t('кнопка скрывается при правке операции',
   app.includes("moreBtnE.style.display = 'none'"), 'не скрывается');
-t('три карточки кликабельны, четвёртая нет',
-  (app.match(/stat-card is-clickable/g) || []).length === 3,
+// три карточки фильтруют по типу, четвёртая («На счетах») открывает вкладку «Счета»
+t('три карточки фильтруют, четвёртая ведёт на счета',
+  (app.match(/stat-card is-clickable/g) || []).length === 4 && app.includes(`onclick="opsNav('op-acc')"`),
   (app.match(/stat-card is-clickable/g) || []).length);
 t('клик карточки зовёт opsStatFilterType',
   (app.match(/opsStatFilterType\(/g) || []).length === 3,

@@ -70,13 +70,18 @@ function opsBudgetForMonth(ym) {
 
 function _r2(n) { return +(+n).toFixed(2); }
 
+// Сумма в базовой валюте — лимит задаётся в ней (см. js/currency.js)
+function _budAmt(t) {
+  return (typeof opsBaseAmount === 'function') ? opsBaseAmount(t) : (+t.amount || 0);
+}
+
 // Средний доход за последние завершённые месяцы — подсказка для поля прогноза
 function opsBudgetAvgIncome(n) {
   const cur = new Date().toISOString().slice(0, 7);
   const months = getMonths().filter(m => m < cur).slice(-(n || OPS_BUDGET_AVG_MONTHS));
   if (!months.length) return 0;
   const sum = months.reduce((acc, m) =>
-    acc + txnsByMonth(m).filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0), 0);
+    acc + txnsByMonth(m).filter(t => t.type === 'income').reduce((s, t) => s + _budAmt(t), 0), 0);
   return _r2(sum / months.length);
 }
 
@@ -95,8 +100,8 @@ function opsBudgetCalc(ym) {
 
   let income = 0, expense = 0;
   for (const t of txnsByMonth(ym)) {
-    if (t.type === 'income') income += t.amount;
-    else expense += Math.abs(t.amount);
+    if (t.type === 'income') income += _budAmt(t);
+    else expense += Math.abs(_budAmt(t));
   }
   income = _r2(income); expense = _r2(expense);
 

@@ -28,8 +28,7 @@ const OPS_FILTERS_KEY = 'finOpsFilters';
 // поэтому год восстанавливаем раньше месяца.
 const OPS_FILTER_FIELDS = {
   'op-p1': ['f1search', 'f1type', 'f1way', 'f1cat', 'f1year', 'f1month'],
-  'op-p2': ['f2search', 'f2year', 'f2month'],
-  'op-p5': ['f5search', 'f5year', 'f5month'],
+  'op-acc': ['facc-acc', 'facc-search', 'facc-year', 'facc-month'],
   'op-p3': ['f3year'],
   'op-p6': ['f6year', 'f6month', 'f6type', 'f6chart']
 };

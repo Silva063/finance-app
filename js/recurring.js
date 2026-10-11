@@ -75,7 +75,7 @@ function opsRecDue(today) {
       const date = opsRecDateFor(ym, r.day);
       if (date > t0) continue;                  // срок ещё не наступил
       out.push({ tplId: tpl.id, name: tpl.name, ym, date,
-                 type: tpl.type, way: tpl.way, amount: tpl.amount, cat: tpl.cat,
+                 type: tpl.type, account: opsTxnAccount(tpl), amount: tpl.amount, cat: tpl.cat,
                  comment: tpl.comment });
     }
   }
@@ -90,6 +90,15 @@ function _opsRecMarkDone(tplId, ym) {
   tpl._editedAt = new Date().toISOString();   // чтобы второе устройство не спросило снова
 }
 
+// Для валютного счёта фиксируем курс на дату платежа, как при вводе руками
+function _opsRecRate(accId, date) {
+  if (typeof opsAccCurrency !== 'function') return {};
+  const cur = opsAccCurrency(accId), base = opsBaseCurrency();
+  if (cur === base) return {};
+  const r = opsFxRate(cur, base, date);
+  return r ? { rate: +r.toFixed(6), rateTo: base } : {};
+}
+
 // Создаёт операцию из шаблона за указанный месяц
 function opsRecAdd(tplId, ym, silent) {
   const tpl = opsTplFind(tplId);
@@ -102,7 +111,9 @@ function opsRecAdd(tplId, ym, silent) {
 
   opsState.txns.push({
     id: opsGenId(), date,
-    type: tpl.type, way: tpl.way,
+    type: tpl.type,
+    account: opsTxnAccount(tpl), way: opsAccWay(opsTxnAccount(tpl)),
+    ..._opsRecRate(opsTxnAccount(tpl), date),
     amount: tpl.type === 'expense' ? -amt : amt,
     comment: tpl.comment || '', cat: tpl.cat || '',
     items: tpl.items || [], itemsMode: (tpl.items && tpl.items.length) ? tpl.itemsMode : undefined,
